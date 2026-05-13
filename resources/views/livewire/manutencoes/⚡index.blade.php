@@ -1,0 +1,238 @@
+<?php
+
+use App\Models\Maintenance;
+use App\Models\MaintenancePlan;
+use App\Models\Resource;
+use Livewire\Volt\Component;
+use Livewire\WithPagination;
+
+new class extends Component {
+    use WithPagination;
+
+    public string $search = '';
+    public string $status = '';
+    public string $sortBy = 'scheduled_at';
+    public string $sortDir = 'desc';
+    public $resource_id = '';
+    public $plan_id = '';
+
+    public function rendering($view)
+    {
+        $view->layoutData(['title' => 'Manutenções']);
+    }
+
+    public function updated($propertyName): void
+    {
+        if (in_array($propertyName, ['search', 'status', 'resource_id', 'plan_id'])) {
+            $this->resetPage();
+        }
+    }
+
+    public function sort(string $column): void
+    {
+        if ($this->sortBy === $column) {
+            $this->sortDir = $this->sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            $this->sortBy = $column;
+            $this->sortDir = 'asc';
+        }
+    }
+
+    public function with(): array
+    {
+        return [
+            'configFiltros' => [
+                [
+                    'type' => 'text',
+                    'model' => 'search',
+                    'placeholder' => 'Procurar manutenções...',
+                ],
+                [
+                    'type' => 'select',
+                    'model' => 'status',
+                    'label' => 'Todos os estados',
+                    'options' => [
+                        'done' => 'Concluída',
+                        'pending' => 'Pendente',
+                        'in_progress' => 'Em progresso',
+                        'cancelled' => 'Cancelada',
+                    ],
+                ],
+                [
+                    'type' => 'select',
+                    'model' => 'resource_id',
+                    'label' => 'Todos os recursos',
+                    // Carrega apenas recursos com pelo menos uma manutenção
+                    'options' => Resource::whereHas('maintenances')
+                        ->pluck('name', 'id')
+                        ->toArray(),
+                ],
+                [
+                    'type' => 'select',
+                    'model' => 'plan_id',
+                    'label' => 'Todos os planos',
+                    // Carrega apenas planos com pelo menos uma manutenção
+                    'options' => MaintenancePlan::whereHas('maintenances')
+                        ->pluck('name', 'id')
+                        ->toArray(),
+                ],
+            ],
+
+            'valoresAtuais' => [
+                'search' => $this->search,
+                'status' => $this->status,
+                'resource_id' => $this->resource_id,
+                'plan_id' => $this->plan_id,
+            ],
+
+            'manutencoes' => Maintenance::query()
+                ->with(['resource', 'plan', 'createdBy', 'parts'])
+                ->when($this->search, fn($q) => $q->where(fn($sub) => $sub->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->search}%"))
+                    ->orWhere('notes', 'like', "%{$this->search}%")
+                )
+                )
+                ->when($this->status, fn($q) => $q->where('status', $this->status))
+                ->when($this->resource_id, fn($q) => $q->where('resource_id', $this->resource_id))
+                ->when($this->plan_id, fn($q) => $q->where('maintenance_plan_id', $this->plan_id))
+                ->orderBy($this->sortBy, $this->sortDir)
+                ->paginate(13),
+        ];
+    }
+};
+?>
+
+
+<div>
+    <flux:main container class="space-y-6">
+
+        {{-- Header --}}
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <flux:heading size="xl" level="1">Manutenções</flux:heading>
+            <flux:button variant="primary" icon="plus" href="#" wire:navigate>
+                Nova Manutenção
+            </flux:button>
+        </div>
+
+        <flux:separator variant="subtle"/>
+
+
+        <x-filtros-bar :config="$configFiltros" :valores="$valoresAtuais"/>
+
+        {{-- Tabela --}}
+        <flux:card class="p-0 overflow-hidden">
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column
+                        sortable
+                        :sorted="$sortBy === 'scheduled_at'"
+                        :direction="$sortDir"
+                        wire:click="sort('scheduled_at')"
+                    >Data
+                    </flux:table.column>
+                    <flux:table.column>Recurso</flux:table.column>
+                    <flux:table.column>Plano</flux:table.column>
+                    <flux:table.column>Estado</flux:table.column>
+                    <flux:table.column>Peças</flux:table.column>
+                    <flux:table.column
+                        sortable
+                        :sorted="$sortBy === 'cost'"
+                        :direction="$sortDir"
+                        wire:click="sort('cost')"
+                    >Custo
+                    </flux:table.column>
+                    <flux:table.column></flux:table.column>
+                </flux:table.columns>
+
+                <flux:table.rows>
+                    @forelse($manutencoes as $manutencao)
+                        <flux:table.row :key="$manutencao->id">
+
+                            <flux:table.cell>
+                                <div class="flex flex-col">
+                        <span class="text-sm font-medium">
+                            {{ $manutencao->scheduled_at?->format('d/m/Y') ?? '—' }}
+                        </span>
+                                    @if($manutencao->done_at)
+                                        <span class="text-xs text-zinc-400">
+                                Feita: {{ $manutencao->done_at->format('d/m/Y') }}
+                            </span>
+                                    @endif
+                                </div>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                <div class="flex flex-col">
+                                    <span class="font-medium text-sm">{{ $manutencao->resource->name }}</span>
+                                    <span class="text-xs text-zinc-400">{{ $manutencao->resource->location }}</span>
+                                </div>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                @if($manutencao->plan)
+                                    <flux:badge color="purple" size="sm">{{ $manutencao->plan->name }}</flux:badge>
+                                @else
+                                    <span class="text-xs text-zinc-400">Sem plano</span>
+                                @endif
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                @php
+                                    $badge = match($manutencao->status) {
+                                        'done'        => ['color' => 'green',  'icon' => 'check-circle', 'label' => 'Concluída'],
+                                        'in_progress' => ['color' => 'blue',   'icon' => 'wrench',       'label' => 'Em progresso'],
+                                        'cancelled'   => ['color' => 'red',    'icon' => 'x-circle',     'label' => 'Cancelada'],
+                                        default       => ['color' => 'yellow', 'icon' => 'clock',        'label' => 'Pendente'],
+                                    };
+                                @endphp
+                                <flux:badge color="{{ $badge['color'] }}" icon="{{ $badge['icon'] }}" size="sm">
+                                    {{ $badge['label'] }}
+                                </flux:badge>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                @if($manutencao->parts->count())
+                                    <flux:badge color="zinc" size="sm">{{ $manutencao->parts->count() }}peça(s)
+                                    </flux:badge>
+                                @else
+                                    <span class="text-xs text-zinc-400">—</span>
+                                @endif
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                @if($manutencao->cost)
+                                    <span class="text-sm font-medium">
+                            {{ number_format($manutencao->cost, 2, ',', '.') }} €
+                        </span>
+                                @else
+                                    <span class="text-xs text-zinc-400">—</span>
+                                @endif
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                <flux:button
+                                    variant="subtle"
+                                    size="sm"
+                                    icon="eye"
+                                    href="{{ route('manutencoes.show', $manutencao) }}"
+                                    wire:navigate
+                                />
+                            </flux:table.cell>
+
+                        </flux:table.row>
+                    @empty
+                        <flux:table.row>
+                            <flux:table.cell colspan="7" class="text-center py-12 text-zinc-400">
+                                <flux:icon name="wrench" class="size-8 mx-auto mb-2 opacity-40"/>
+                                <p>Nenhuma manutenção encontrada.</p>
+                            </flux:table.cell>
+                        </flux:table.row>
+                    @endforelse
+                </flux:table.rows>
+            </flux:table>
+        </flux:card>
+
+        {{ $manutencoes->links('components.pagination', ['color' => 'primary']) }}
+
+    </flux:main>
+
+</div>
