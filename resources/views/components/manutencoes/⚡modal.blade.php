@@ -1,90 +1,78 @@
 <?php
 
 use Livewire\Component;
-use Livewire\Attributes\Validate;
-use Livewire\WithFileUploads;
+use App\Models\Maintenance;
+use App\Models\MaintenancePlan;
 use App\Models\Resource;
-use App\Models\ResourcePhoto;
-use Illuminate\Support\Facades\Storage;
 
 new class extends Component
 {
-    use WithFileUploads;
+    public ?Maintenance $manutencao = null;
 
-    public ?Resource $recurso = null;
-
-    public $name = '';
-    public $description = '';
-    public $location = '';
-    public $section = '';
-    public $status = 'active';
-
-    public array $photos = [];
-    public array $existingPhotos = [];
+    public $maintenance_plan_id = '';
+    public $resource_id = '';
+    public $scheduled_at = '';
+    public $status = 'pending';
+    public $notes = '';
 
     protected function rules(): array
     {
-        return array_merge(Resource::rules(), [
-            'photos.*' => ['nullable', 'image', 'max:4096'],
-        ]);
+        return [
+            'maintenance_plan_id' => ['nullable', 'exists:maintenance_plans,id'],
+            'resource_id'         => ['required', 'exists:resources,id'],
+            'scheduled_at'        => ['nullable', 'date'],
+            'status'              => ['required', 'in:pending,in_progress,done,cancelled'],
+            'notes'               => ['nullable', 'string'],
+        ];
     }
 
-    public function mount(?Resource $recurso = null)
+    public function mount(?Maintenance $manutencao = null): void
     {
-        if ($recurso && $recurso->exists) {
-            $this->recurso      = $recurso;
-            $this->name         = $recurso->name;
-            $this->description  = $recurso->description;
-            $this->location     = $recurso->location;
-            $this->section      = $recurso->section;
-            $this->status       = $recurso->status;
-            $this->existingPhotos = $recurso->photos->toArray();
+        if ($manutencao && $manutencao->exists) {
+            $this->manutencao           = $manutencao;
+            $this->maintenance_plan_id  = $manutencao->maintenance_plan_id ?? '';
+            $this->resource_id          = $manutencao->resource_id;
+            $this->scheduled_at         = $manutencao->scheduled_at?->format('Y-m-d') ?? '';
+            $this->status               = $manutencao->status;
+            $this->notes                = $manutencao->notes ?? '';
         } else {
-            $this->recurso = new Resource();
+            $this->manutencao = new Maintenance();
         }
     }
 
-    public function removeExistingPhoto(int $photoId): void
+    public function save(): void
     {
-        $photo = ResourcePhoto::findOrFail($photoId);
-        abort_unless($this->recurso->exists && $photo->resource_id === $this->recurso->id, 403);
+        $this->validate();
 
-        Storage::disk($photo->disk)->delete($photo->path);
-        $photo->delete();
-
-        $this->existingPhotos = $this->recurso->fresh()->photos->toArray();
-    }
-
-    public function removeNewPhoto(int $index): void
-    {
-        array_splice($this->photos, $index, 1);
-    }
-
-    public function save()
-    {
-        $validated = $this->validate(Resource::rules());
-        $validated = $this->validate(ResourcePhoto::rules());
-
-        $this->recurso->fill([
-            'name'        => $this->name,
-            'description' => $this->description,
-            'location'    => $this->location,
-            'section'     => $this->section,
-            'status'      => $this->status,
+        $this->manutencao->fill([
+            'maintenance_plan_id' => $this->maintenance_plan_id ?: null,
+            'resource_id'         => $this->resource_id,
+            'scheduled_at'        => $this->scheduled_at ?: null,
+            'status'              => $this->status,
+            'notes'               => $this->notes ?: null,
+            /*
+              'created_by'          => $this->manutencao->exists
+                ? $this->manutencao->created_by
+                : auth()->id(),
+             */
         ]);
-        $this->recurso->save();
+        $this->manutencao->save();
 
-        foreach ($this->photos as $photo) {
-            $path = $photo->store("resources/{$this->recurso->id}", 'public');
-            $this->recurso->photos()->create(['path' => $path, 'disk' => 'public']);
-        }
-
-        return $this->fechar();
+        $this->dispatch('manutencao-saved');
+        $this->fechar();
     }
 
     public function fechar()
     {
-        return $this->redirect(request()->header('Referer'), navigate: true);
+        return $this->redirect(request()->header('Referer') ?? route('manutencoes.index'), navigate: true);
+    }
+
+    public function with(): array
+    {
+        return [
+            'recursos' => Resource::orderBy('name')->pluck('name', 'id'),
+            'planos'   => MaintenancePlan::orderBy('name')->pluck('name', 'id'),
+        ];
     }
 };
 ?>
@@ -93,90 +81,73 @@ new class extends Component
     <form wire:submit="save">
         <flux:card class="space-y-6">
 
-            <div class="space-y-6">
-                <flux:input
-                    label="Nome"
-                    wire:model.blur="name"
-                    placeholder="Ex: Projetor Sala A"
-                    copyable
-                />
-
-                <flux:textarea
-                    label="Descrição"
-                    wire:model.blur="description"
-                    placeholder="Detalhes do recurso..."
-                />
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <flux:input label="Localização" wire:model.blur="location" icon="map-pin" />
-                    <flux:input label="Secção / Departamento" wire:model.blur="section" icon="building-office" />
-                </div>
-
-                <flux:select label="Status" wire:model="status">
-                    <flux:select.option value="active">Ativo</flux:select.option>
-                    <flux:select.option value="inactive">Inativo</flux:select.option>
-                </flux:select>
+            <div>
+                <flux:heading size="lg">
+                    {{ $manutencao && $manutencao->exists ? 'Editar Manutenção' : 'Nova Manutenção' }}
+                </flux:heading>
+                <flux:text size="sm" class="text-zinc-400 mt-1">
+                    {{ $manutencao && $manutencao->exists ? "Manutenção #{$manutencao->id}" : 'Preenche os dados abaixo.' }}
+                </flux:text>
             </div>
 
-            {{-- Fotos já gravadas --}}
-            @if (count($existingPhotos))
-                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-                    @foreach ($existingPhotos as $photo)
-                        <div class="relative group aspect-square">
-                            <img
-                                src="{{ $photo['url'] }}"  {{-- ← simples, vem do model --}}
-                            alt="Foto do recurso"
-                                class="w-full h-full object-cover rounded-lg"
-                            />
-                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                                <flux:button
-                                    type="button"
-                                    wire:click="removeExistingPhoto({{ $photo['id'] }})"
-                                    wire:confirm="Remover esta foto permanentemente?"
-                                    variant="danger"
-                                    size="xs"
-                                    icon="trash"
-                                />
-                            </div>
-                        </div>
+            <flux:separator variant="subtle" />
+
+            <div class="space-y-4">
+
+                <flux:select
+                    label="Recurso"
+                    wire:model="resource_id"
+                    placeholder="Seleciona um recurso..."
+                >
+                    @foreach($recursos as $id => $nome)
+                        <flux:select.option value="{{ $id }}">{{ $nome }}</flux:select.option>
                     @endforeach
-                </div>
-            @endif
-
-                {{-- Upload + pré-visualização de novas fotos --}}
-                <flux:file-upload wire:model="photos" multiple>
-                    <flux:file-upload.dropzone
-                        heading="Arrasta fotos ou clica para selecionar"
-                        text="PNG, JPG, WEBP — máx. 4 MB cada"
-                    />
-
-                    <div class="mt-3 flex flex-col gap-2">
-                        @foreach ($photos as $i => $photo)
-                            <flux:file-item
-                                :heading="$photo->getClientOriginalName()"
-                                :image="$photo->temporaryUrl()"
-                                :size="$photo->getSize()"
-                            >
-                                <x-slot name="actions">
-                                    <flux:file-item.remove
-                                        wire:click="removeNewPhoto({{ $i }})"
-                                        aria-label="Remover {{ $photo->getClientOriginalName() }}"
-                                    />
-                                </x-slot>
-                            </flux:file-item>
-                        @endforeach
-                    </div>
-                </flux:file-upload>
-
-                @error('photos.*')
+                </flux:select>
+                @error('resource_id')
                 <flux:error>{{ $message }}</flux:error>
                 @enderror
+
+                <flux:select
+                    label="Plano de manutenção"
+                    wire:model="maintenance_plan_id"
+                    placeholder="Sem plano (opcional)"
+                >
+                    <flux:select.option value="">Sem plano</flux:select.option>
+                    @foreach($planos as $id => $nome)
+                        <flux:select.option value="{{ $id }}">{{ $nome }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <flux:input
+                        label="Data agendada"
+                        wire:model="scheduled_at"
+                        type="date"
+                        icon="calendar"
+                    />
+
+                    <flux:select label="Estado" wire:model="status">
+                        <flux:select.option value="pending">Pendente</flux:select.option>
+                        <flux:select.option value="in_progress">Em progresso</flux:select.option>
+                        <flux:select.option value="done">Concluída</flux:select.option>
+                        <flux:select.option value="cancelled">Cancelada</flux:select.option>
+                    </flux:select>
+                </div>
+
+                <flux:textarea
+                    label="Notas"
+                    wire:model.blur="notes"
+                    placeholder="Observações sobre a manutenção..."
+                    rows="3"
+                />
+
             </div>
+
             <div class="flex gap-2 w-full">
                 <flux:button type="submit" variant="primary" class="w-full">
-                    {{ $recurso && $recurso->exists ? 'Atualizar' : 'Criar' }}
+                    {{ $manutencao && $manutencao->exists ? 'Atualizar' : 'Criar' }}
                 </flux:button>
-                <flux:button wire:click="fechar" variant="danger" class="w-full">
+                <flux:button type="button" wire:click="fechar" variant="danger" class="w-full">
                     Cancelar
                 </flux:button>
             </div>

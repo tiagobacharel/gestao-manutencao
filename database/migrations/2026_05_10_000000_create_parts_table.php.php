@@ -11,12 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('maintenance_parts', function (Blueprint $table) {
+        Schema::create('parts', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('maintenance_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('part_id')->constrained('parts')->restrictOnDelete();
-            $table->unsignedInteger('quantity')->default(1);
-            $table->decimal('unit_cost_at_time', 10, 2)->default(0);
+            $table->string('reference')->unique();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->unsignedInteger('stock_current')->default(0);
+            $table->decimal('current_unit_cost', 10, 2)->default(0);
             $table->timestamps();
         });
     }
@@ -26,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('maintenance_parts');
+        Schema::dropIfExists('parts');
     }
 };

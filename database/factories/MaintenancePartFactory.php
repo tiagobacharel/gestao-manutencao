@@ -2,7 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Models\Maintenance;
 use App\Models\MaintenancePart;
+use \App\Models\Part;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class MaintenancePartFactory extends Factory
@@ -12,14 +14,10 @@ class MaintenancePartFactory extends Factory
     public function definition(): array
     {
         return [
-            'reference'   => $this->faker->optional(0.7)->bothify('REF-####-??'),
-            'description' => $this->faker->randomElement([
-                'Filtro de óleo', 'Correia de transmissão', 'Rolamento SKF',
-                'Vedante de borracha', 'Parafuso M10', 'Sensor de temperatura',
-                'Fusível 10A', 'Lubrificante Shell', 'Bomba hidráulica',
-            ]),
+            'maintenance_id' => Maintenance::factory(),
+            'part_id'     => Part::factory(),
             'quantity'    => $this->faker->numberBetween(1, 10),
-            'unit_cost'   => $this->faker->randomFloat(2, 1, 500),
+            'unit_cost_at_time'   => $this->faker->randomFloat(2, 1, 500),
         ];
     }
 }

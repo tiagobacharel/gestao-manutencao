@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\MaintenancePlan;
+use \App\Models\Part;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class PlanPartFactory extends Factory
@@ -11,10 +12,8 @@ class PlanPartFactory extends Factory
     {
         return [
             'maintenance_plan_id' => MaintenancePlan::factory(),
-            'reference'           => fake()->optional()->bothify('PART-####-??'),
-            'description'         => fake()->sentence(4),
+            'part_id'             => Part::factory(),
             'quantity'            => fake()->numberBetween(1, 10),
-            'unit_cost'           => fake()->randomFloat(2, 5, 500),
         ];
     }
 }

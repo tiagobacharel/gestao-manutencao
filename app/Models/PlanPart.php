@@ -13,14 +13,17 @@ class PlanPart extends Model
     // Define os campos protegidos/permitidos se necessário (Mass Assignment)
     protected $fillable = [
         'maintenance_plan_id',
-        'reference',
-        'description',
-        'quantity',
-        'unit_cost'
+        'part_id',
+        'quantity'
     ];
+
+    public function part(): BelongsTo
+    {
+        return $this->belongsTo(Part::class, 'part_id');
+    }
 
     public function maintenancePlan(): BelongsTo
     {
-        return $this->belongsTo(MaintenancePlan::class);
+        return $this->belongsTo(MaintenancePlan::class, 'maintenance_plan_id');
     }
 }

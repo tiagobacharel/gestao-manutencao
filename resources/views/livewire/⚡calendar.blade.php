@@ -139,18 +139,19 @@ new class extends Component {
                         @foreach($week as $day)
                             <div class="min-h-[120px] p-1.5 flex flex-col gap-1
                                 {{ !$day['isCurrentMonth'] ? 'bg-zinc-50/60 dark:bg-zinc-900/50' : '' }}
-                                {{ $day['isToday'] ? 'bg-primary-50 dark:bg-primary-950/30' : '' }}">
+                                {{ $day['isToday'] ? 'bg-zinc-100/70 dark:bg-zinc-800/40 font-semibold' : '' }}">
 
                                 {{-- Número do dia --}}
                                 <div class="flex justify-end mb-0.5">
-                                    <span class="text-xs font-medium flex items-center justify-center w-6 h-6 rounded-full
+                                    <span class="text-xs font-semibold flex items-center justify-center w-6 h-6 rounded-full
                                         {{ $day['isToday']
-                                            ? 'bg-primary-600 text-white'
+                                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm scale-105'
                                             : ($day['isCurrentMonth'] ? 'text-zinc-700 dark:text-zinc-300' : 'text-zinc-300 dark:text-zinc-600')
                                         }}">
                                         {{ $day['date']->day }}
                                     </span>
                                 </div>
+
 
                                 {{-- Manutenções --}}
                                 @foreach($day['manutencoes'] as $m)

@@ -41,12 +41,28 @@ class MaintenancePlanFactory extends Factory
     }
 
     // rand() é chamado dentro do afterCreating, logo cada plano recebe um número diferente
-    public function withPlanParts(int $min = 1, int $max = 5): static
+    public function withPlanParts(int $min = 1, int $max = 5, $parts = null): static
     {
-        return $this->afterCreating(function (MaintenancePlan $plan) use ($min, $max) {
-            \App\Models\PlanPart::factory(rand($min, $max))->create([
-                'maintenance_plan_id' => $plan->id,
-            ]);
+        return $this->afterCreating(function (\App\Models\MaintenancePlan $plan) use ($min, $max, $parts) {
+            $count = rand($min, $max);
+
+            for ($i = 0; $i < $count; $i++) {
+                $part = ($parts && method_exists($parts, 'isNotEmpty') && $parts->isNotEmpty())
+                    ? $parts->random()
+                    : \App\Models\Part::factory()->create();
+
+                // Correção: Se a peça já saiu para este plano, ele apenas atualiza/soma a quantidade
+                // em vez de tentar enfiar uma linha duplicada na BD.
+                \App\Models\PlanPart::updateOrCreate(
+                    [
+                        'maintenance_plan_id' => $plan->id,
+                        'part_id'             => $part->id,
+                    ],
+                    [
+                        'quantity' => rand(1, 5),
+                    ]
+                );
+            }
         });
     }
 }

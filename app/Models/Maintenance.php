@@ -41,6 +41,10 @@ class Maintenance extends Model
 
     public function parts()
     {
-        return $this->hasMany(MaintenancePart::class);
+        return $this->belongsToMany(Part::class, 'maintenance_parts')
+            ->withPivot('quantity', 'unit_cost_at_time')
+            ->withTimestamps();
     }
+
+
 }

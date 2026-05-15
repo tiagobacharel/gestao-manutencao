@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Maintenance;
+use App\Models\MaintenancePart;
 use App\Models\MaintenancePlan;
 use App\Models\Resource;
 use Livewire\Volt\Component;
@@ -49,17 +50,6 @@ new class extends Component {
                 ],
                 [
                     'type' => 'select',
-                    'model' => 'status',
-                    'label' => 'Todos os estados',
-                    'options' => [
-                        'done' => 'Concluída',
-                        'pending' => 'Pendente',
-                        'in_progress' => 'Em progresso',
-                        'cancelled' => 'Cancelada',
-                    ],
-                ],
-                [
-                    'type' => 'select',
                     'model' => 'resource_id',
                     'label' => 'Todos os recursos',
                     // Carrega apenas recursos com pelo menos uma manutenção
@@ -75,6 +65,17 @@ new class extends Component {
                     'options' => MaintenancePlan::whereHas('maintenances')
                         ->pluck('name', 'id')
                         ->toArray(),
+                ],
+                [
+                    'type' => 'select',
+                    'model' => 'status',
+                    'label' => 'Todos os estados',
+                    'options' => [
+                        'done' => 'Concluída',
+                        'pending' => 'Pendente',
+                        'in_progress' => 'Em progresso',
+                        'cancelled' => 'Cancelada',
+                    ],
                 ],
             ],
 
@@ -94,10 +95,22 @@ new class extends Component {
                 ->when($this->status, fn($q) => $q->where('status', $this->status))
                 ->when($this->resource_id, fn($q) => $q->where('resource_id', $this->resource_id))
                 ->when($this->plan_id, fn($q) => $q->where('maintenance_plan_id', $this->plan_id))
-                ->orderBy($this->sortBy, $this->sortDir)
+                ->when(
+                    $this->sortBy === 'cost',
+                    fn($q) => $q->orderBy(
+                        MaintenancePart::selectRaw('COALESCE(SUM(quantity * unit_cost), 0)')
+                            ->whereColumn('maintenance_id', 'maintenances.id'),
+                        $this->sortDir
+                    ),
+                    fn($q) => $q->orderBy($this->sortBy, $this->sortDir)
+                )
                 ->paginate(13),
         ];
     }
+
+    public bool $showModal = false;
+
+    public function openModal() { $this->showModal = true; }
 };
 ?>
 
@@ -108,12 +121,16 @@ new class extends Component {
         {{-- Header --}}
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <flux:heading size="xl" level="1">Manutenções</flux:heading>
-            <flux:button variant="primary" icon="plus" href="#" wire:navigate>
+            <flux:button variant="primary" icon="plus" wire:click="openModal" wire:navigate>
                 Nova Manutenção
             </flux:button>
         </div>
 
         <flux:separator variant="subtle"/>
+
+        @if($showModal)
+            <livewire:manutencoes.modal />
+        @endif
 
 
         <x-filtros-bar :config="$configFiltros" :valores="$valoresAtuais"/>
@@ -191,7 +208,7 @@ new class extends Component {
 
                             <flux:table.cell>
                                 @if($manutencao->parts->count())
-                                    <flux:badge color="zinc" size="sm">{{ $manutencao->parts->count() }}peça(s)
+                                    <flux:badge color="zinc" size="sm">{{ $manutencao->parts->count() }} peça(s)
                                     </flux:badge>
                                 @else
                                     <span class="text-xs text-zinc-400">—</span>
@@ -199,10 +216,13 @@ new class extends Component {
                             </flux:table.cell>
 
                             <flux:table.cell>
-                                @if($manutencao->cost)
+                                @php
+                                    $total = $manutencao->parts->sum(fn($part) => $part->pivot->quantity * $part->pivot->unit_cost_at_time)
+                                @endphp
+                                @if($total > 0)
                                     <span class="text-sm font-medium">
-                            {{ number_format($manutencao->cost, 2, ',', '.') }} €
-                        </span>
+                                        {{ number_format($total, 2, ',', '.') }} €
+                                    </span>
                                 @else
                                     <span class="text-xs text-zinc-400">—</span>
                                 @endif

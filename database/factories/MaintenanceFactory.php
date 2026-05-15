@@ -33,7 +33,7 @@ class MaintenanceFactory extends Factory
                 ? MaintenancePlan::inRandomOrder()->first()?->id
                 : null,
             'resource_id'  => Resource::inRandomOrder()->first()->id,
-            'created_by'   => User::inRandomOrder()->first()->id,
+            #'created_by'   => User::inRandomOrder()->first()->id,
             'scheduled_at' => $scheduledAt,
             'done_at'      => $doneAt,
             'status'       => $status,
@@ -74,50 +74,47 @@ class MaintenanceFactory extends Factory
         });
     }
 
-    // Peças baseadas no plano associado, com variações realistas.
-    // Manutenções sem plano recebem peças aleatórias.
     public function withPlanBasedParts(): static
     {
         return $this->afterCreating(function (Maintenance $maintenance) {
-            $planParts = $maintenance->maintenance_plan_id
-                ? \App\Models\PlanPart::where('maintenance_plan_id', $maintenance->maintenance_plan_id)->get()
-                : collect();
+            if ($maintenance->maintenance_plan_id) {
+                $planParts = \App\Models\PlanPart::where('maintenance_plan_id', $maintenance->maintenance_plan_id)->get();
 
-            if ($planParts->isEmpty()) {
-                if (fake()->boolean(70)) {
-                    \App\Models\MaintenancePart::factory(rand(1, 4))->create([
-                        'maintenance_id' => $maintenance->id,
+                foreach ($planParts as $planPart) {
+                    $part = $planPart->part;
+
+                    // SIMULAÇÃO DE DESVIO INDUSTRIAL:
+                    // 30% de probabilidade de o técnico gastar uma quantidade diferente da prevista no plano
+                    $quantidadeReal = fake()->boolean(30)
+                        ? $planPart->quantity + fake()->randomElement([-1, 1, 2])
+                        : $planPart->quantity;
+
+                    // Garante que a quantidade nunca é zero ou negativa
+                    $quantidadeReal = max(1, $quantidadeReal);
+
+                    // 20% de probabilidade de o preço ter sofrido uma ligeira flutuação no dia da compra
+                    $custoCongelado = fake()->boolean(20)
+                        ? ($part ? $part->current_unit_cost * fake()->randomFloat(2, 0.9, 1.1) : 0)
+                        : ($part ? $part->current_unit_cost : 0);
+
+                    \App\Models\MaintenancePart::create([
+                        'maintenance_id'    => $maintenance->id,
+                        'part_id'           => $planPart->part_id,
+                        'quantity'          => $quantidadeReal, // Quantidade com desvio simulado
+                        'unit_cost_at_time' => $custoCongelado, // Preço com flutuação simulada
                     ]);
                 }
-                return;
-            }
-
-            foreach ($planParts as $planPart) {
-                $scenario = fake()->randomElement(['exact', 'exact', 'more_qty', 'different']);
-
-                \App\Models\MaintenancePart::factory()->create([
-                    'maintenance_id' => $maintenance->id,
-                    'reference'      => $scenario === 'different'
-                        ? fake()->optional(0.6)->bothify('REF-####-??')
-                        : $planPart->reference,
-                    'description'    => $scenario === 'different'
-                        ? fake()->randomElement([
-                            'Filtro substituto', 'Correia reforçada', 'Rolamento alternativo',
-                            'Vedante importado', 'Parafuso reforçado M12', 'Sensor substituto',
-                        ])
-                        : $planPart->description,
-                    'quantity'       => $scenario === 'more_qty'
-                        ? $planPart->quantity + rand(1, 3)
-                        : $planPart->quantity,
-                    'unit_cost'      => $planPart->unit_cost,
-                ]);
-            }
-
-            // Peças extras além do plano (40% de chance)
-            if (fake()->boolean(40)) {
-                \App\Models\MaintenancePart::factory(rand(1, 2))->create([
-                    'maintenance_id' => $maintenance->id,
-                ]);
+            } else {
+                // Código para manutenção sem plano mantém-se igual...
+                $parts = \App\Models\Part::inRandomOrder()->take(rand(1, 3))->get();
+                foreach ($parts as $part) {
+                    \App\Models\MaintenancePart::create([
+                        'maintenance_id'    => $maintenance->id,
+                        'part_id'           => $part->id,
+                        'quantity'          => rand(1, 5),
+                        'unit_cost_at_time' => $part->current_unit_cost,
+                    ]);
+                }
             }
         });
     }

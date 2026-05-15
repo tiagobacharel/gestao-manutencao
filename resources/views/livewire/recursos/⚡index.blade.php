@@ -39,14 +39,14 @@ new class extends Component {
                     'type' => 'select',
                     'model' => 'location',
                     'label' => 'Localização',
-                    'options' => Resource::distinct()->whereNotNull('location')->pluck('location', 'location')->toArray(),
+                    'options' => Resource::distinct()->whereNotNull('location')->where('location', '!=', '')->pluck('location', 'location')->toArray(),
                 ],
                 [
                     'type' => 'select',
                     'model' => 'section',
                     'label' => 'Secção / Dept.',
                     'icon' => 'building-office',
-                    'options' => Resource::distinct()->whereNotNull('section')->pluck('section', 'section')->toArray(),
+                    'options' => Resource::distinct()->whereNotNull('section')->where('location', '!=', '')->pluck('section', 'section')->toArray(),
                 ],
             ],
 

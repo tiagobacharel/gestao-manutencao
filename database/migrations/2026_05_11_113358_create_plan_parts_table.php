@@ -14,10 +14,9 @@ return new class extends Migration
         Schema::create('plan_parts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('maintenance_plan_id')->constrained()->cascadeOnDelete();
-            $table->string('reference')->nullable();
-            $table->text('description');
+            $table->foreignId('part_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('quantity')->default(1);
-            $table->decimal('unit_cost', 10, 2)->default(0);
+            $table->unique(['maintenance_plan_id', 'part_id']);
             $table->timestamps();
         });
     }

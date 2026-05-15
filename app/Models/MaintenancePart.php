@@ -10,14 +10,13 @@ class MaintenancePart extends Model
     use HasFactory;
     protected $fillable = [
         'maintenance_id',
-        'reference',
-        'description',
+        'part_id',
         'quantity',
-        'unit_cost',
+        'unit_cost_at_time',
     ];
 
     protected $casts = [
-        'unit_cost' => 'decimal:2',
+        'unit_cost_at_time' => 'decimal:2',
     ];
 
     public function maintenance()
@@ -27,6 +26,6 @@ class MaintenancePart extends Model
 
     public function getTotalCostAttribute(): float
     {
-        return $this->quantity * $this->unit_cost;
+        return $this->quantity * $this->unit_cost_at_time;
     }
 }

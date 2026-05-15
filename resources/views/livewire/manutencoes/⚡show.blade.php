@@ -38,6 +38,14 @@ new class extends Component {
         $this->manutencao->delete();
         $this->redirect(route('manutencoes.index'), navigate: true);
     }
+
+    public bool $showModal = false;
+
+    public function openModal() { $this->showModal = true; }
+
+    public bool $showModal2 = false;
+
+    public function openModal2() { $this->showModal2 = true; }
 };
 ?>
 
@@ -47,8 +55,7 @@ new class extends Component {
         {{-- Cabeçalho --}}
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex items-center gap-3">
-                <flux:button icon="arrow-left" variant="subtle" size="sm"
-                             href="{{ route('manutencoes.index') }}" wire:navigate label="Voltar" />
+                <flux:button  href="{{ route('manutencoes.index') }}" wire:navigate icon="arrow-left" variant="subtle" size="sm" />
                 <div>
                     <flux:heading size="xl" level="1">
                         {{ $manutencao->resource->name }}
@@ -77,6 +84,12 @@ new class extends Component {
 
         <flux:separator variant="subtle" />
 
+
+
+        @if($showModal)
+            <livewire:manutencoes.modal :manutencao="$manutencao" />
+        @endif
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             {{-- Coluna principal --}}
@@ -92,6 +105,10 @@ new class extends Component {
                     </flux:card>
                 @endif
 
+                @if($showModal2)
+                    <livewire:manutencoes-pecas.modal :manutencao="$manutencao" />
+                @endif
+
                 {{-- Peças utilizadas --}}
                 <flux:card class="space-y-4">
                     <div class="flex items-center justify-between">
@@ -99,6 +116,11 @@ new class extends Component {
                         @if($manutencao->parts->isNotEmpty())
                             <flux:badge color="zinc" size="sm">{{ $manutencao->parts->count() }} peça(s)</flux:badge>
                         @endif
+                        <flux:button wire:click="openModal2" wire:navigate
+                                     class="w-1/5 justify-start" variant="filled" icon="pencil"
+                        >
+                            Editar
+                        </flux:button>
                     </div>
 
                     @if($manutencao->parts->isEmpty())
@@ -107,54 +129,58 @@ new class extends Component {
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm">
                                 <thead>
-                                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-left text-zinc-500 text-xs uppercase tracking-wide">
-                                        <th class="pb-2 pr-4">Referência</th>
-                                        <th class="pb-2 pr-4">Descrição</th>
-                                        <th class="pb-2 pr-4 text-right">Qtd.</th>
-                                        <th class="pb-2 pr-4 text-right">Preço unit.</th>
-                                        <th class="pb-2 text-right">Total</th>
-                                    </tr>
+                                <tr class="border-b border-zinc-200 dark:border-zinc-700 text-left text-zinc-500 text-xs uppercase tracking-wide">
+                                    <th class="pb-2 pr-4">Referência</th>
+                                    <th class="pb-2 pr-4">Descrição</th>
+                                    <th class="pb-2 pr-4 text-right">Qtd.</th>
+                                    <th class="pb-2 pr-4 text-right">Preço unit.</th>
+                                    <th class="pb-2 text-right">Total</th>
+                                </tr>
                                 </thead>
                                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @foreach($manutencao->parts as $part)
-                                        <tr>
-                                            <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
-                                                {{ $part->reference ?? '—' }}
-                                            </td>
-                                            <td class="py-2 pr-4 font-medium">{{ $part->description }}</td>
-                                            <td class="py-2 pr-4 text-right">{{ $part->quantity }}</td>
-                                            <td class="py-2 pr-4 text-right text-zinc-500">
-                                                {{ number_format($part->unit_cost, 2, ',', '.') }} €
-                                            </td>
-                                            <td class="py-2 text-right font-semibold">
-                                                {{ number_format($part->total_cost, 2, ',', '.') }} €
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                                <tfoot>
-                                    <tr class="border-t-2 border-zinc-300 dark:border-zinc-600">
-                                        <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total</td>
-                                        <td class="pt-3 text-right font-bold text-base">
-                                            {{ number_format($manutencao->parts->sum('total_cost'), 2, ',', '.') }} €
+                                @foreach($manutencao->parts as $part)
+                                    <tr>
+                                        <!-- Dados Master (Lidos do Catálogo de Peças) -->
+                                        <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
+                                            {{ $part->reference ?? '—' }}
+                                        </td>
+                                        <td class="py-2 pr-4 font-medium">{{ $part->name }}</td>
+
+                                        <!-- Dados Transacionais (Lidos da tabela Pivot) -->
+                                        <td class="py-2 pr-4 text-right">{{ $part->pivot->quantity }}</td>
+                                        <td class="py-2 pr-4 text-right text-zinc-500">
+                                            {{ number_format($part->pivot->unit_cost_at_time, 2, ',', '.') }} €
+                                        </td>
+                                        <td class="py-2 text-right font-semibold">
+                                            {{ number_format($part->pivot->quantity * $part->pivot->unit_cost_at_time, 2, ',', '.') }} €
                                         </td>
                                     </tr>
+                                @endforeach
+                                </tbody>
+                                <tfoot>
+                                <tr class="border-t-2 border-zinc-300 dark:border-zinc-600">
+                                    <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total</td>
+                                    <td class="pt-3 text-right font-bold text-base">
+                                        {{ number_format($manutencao->parts->sum(fn($part) => $part->pivot->quantity * $part->pivot->unit_cost_at_time), 2, ',', '.') }}&nbsp;€
+                                    </td>
+                                </tr>
                                 </tfoot>
                             </table>
                         </div>
                         @if($manutencao->plan && $manutencao->plan->planParts->isNotEmpty() && $manutencao->parts->isNotEmpty())
                             @php
-                                $previsto = $manutencao->plan->planParts->sum(fn($p) => $p->quantity * $p->unit_cost);
-                                $real     = $manutencao->parts->sum(fn($p) => $p->quantity * $p->unit_cost);
-                                $desvio   = $real - $previsto;
+                                $custoReal = $manutencao->parts->sum(fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time);
+                                $custoPrevisto = $manutencao->plan->planParts->sum(fn($p) => $p->quantity * ($p->part?->current_unit_cost ?? 0));
+                                $desvio = $custoReal - $custoPrevisto;
                             @endphp
+
                             <div class="flex items-center justify-end gap-2 pt-1">
                                 <flux:text size="sm" class="text-zinc-500">Desvio:</flux:text>
-                                @if($desvio > 0)
+                                @if($desvio > 0.01)
                                     <flux:badge color="red" icon="arrow-trending-up">
                                         +{{ number_format($desvio, 2, ',', '.') }} €
                                     </flux:badge>
-                                @elseif($desvio < 0)
+                                @elseif($desvio < -0.01)
                                     <flux:badge color="green" icon="arrow-trending-down">
                                         {{ number_format($desvio, 2, ',', '.') }} €
                                     </flux:badge>
@@ -180,43 +206,58 @@ new class extends Component {
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm">
                                 <thead>
-                                    <tr class="border-b border-zinc-200 dark:border-zinc-700 text-left text-zinc-500 text-xs uppercase tracking-wide">
-                                        <th class="pb-2 pr-4">Referência</th>
-                                        <th class="pb-2 pr-4">Descrição</th>
-                                        <th class="pb-2 pr-4 text-right">Qtd. prevista</th>
-                                        <th class="pb-2 pr-4 text-right">Preço unit.</th>
-                                        <th class="pb-2 text-right">Total previsto</th>
-                                    </tr>
+                                <tr class="border-b border-zinc-200 dark:border-zinc-700 text-left text-zinc-500 text-xs uppercase tracking-wide">
+                                    <th class="pb-2 pr-4">Referência</th>
+                                    <th class="pb-2 pr-4">Descrição</th>
+                                    <th class="pb-2 pr-4 text-right">Qtd. prevista</th>
+                                    <th class="pb-2 pr-4 text-right">Preço unit.</th>
+                                    <th class="pb-2 text-right">Total previsto</th>
+                                </tr>
                                 </thead>
                                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                    @foreach($manutencao->plan->planParts as $planPart)
-                                        <tr>
-                                            <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
-                                                {{ $planPart->reference ?? '—' }}
-                                            </td>
-                                            <td class="py-2 pr-4 font-medium">{{ $planPart->description }}</td>
-                                            <td class="py-2 pr-4 text-right">{{ $planPart->quantity }}</td>
-                                            <td class="py-2 pr-4 text-right text-zinc-500">
-                                                {{ number_format($planPart->unit_cost, 2, ',', '.') }} €
-                                            </td>
-                                            <td class="py-2 text-right font-semibold">
-                                                {{ number_format($planPart->quantity * $planPart->unit_cost, 2, ',', '.') }} €
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                                <tfoot>
-                                    <tr class="border-t-2 border-zinc-300 dark:border-zinc-600">
-                                        <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total previsto</td>
-                                        <td class="pt-3 text-right font-bold text-base">
-                                            {{ number_format($manutencao->plan->planParts->sum(fn($p) => $p->quantity * $p->unit_cost), 2, ',', '.') }} €
+                                @foreach($manutencao->plan->planParts as $planPart)
+                                    <tr>
+                                        <!-- 1. Referência com navegação segura -->
+                                        <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
+                                            {{ $planPart->part?->reference ?? '—' }}
+                                        </td>
+
+                                        <!-- 2. Nome/Descrição com navegação segura -->
+                                        <td class="py-2 pr-4 font-medium">
+                                            {{ $planPart->part?->name ?? 'Peça Não Encontrada ou Apagada' }}
+                                        </td>
+
+                                        <!-- 3. Quantidade do Plano -->
+                                        <td class="py-2 pr-4 text-right">
+                                            {{ $planPart->quantity }}
+                                        </td>
+
+                                        <!-- 4. Preço Unitário Seguro (Linha 223 corrigida) -->
+                                        <td class="py-2 pr-4 text-right text-zinc-500">
+                                            {{ number_format($planPart->part?->current_unit_cost ?? 0, 2, ',', '.') }} €
+                                        </td>
+
+                                        <!-- 5. Total por Linha Seguro -->
+                                        <td class="py-2 text-right font-semibold">
+                                            {{ number_format($planPart->quantity * ($planPart->part?->current_unit_cost ?? 0), 2, ',', '.') }} €
                                         </td>
                                     </tr>
+                                @endforeach
+                                </tbody>
+                                <tfoot>
+                                <tr class="border-t-2 border-zinc-300 dark:border-zinc-600">
+                                    <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total previsto</td>
+                                    <!-- 6. Total Geral do Rodapé Seguro -->
+                                    <td class="pt-3 text-right font-bold text-base">
+                                        {{ number_format($manutencao->plan->planParts->sum(fn($p) => $p->quantity * ($p->part?->current_unit_cost ?? 0)), 2, ',', '.') }}&nbsp;€
+                                    </td>
+                                </tr>
                                 </tfoot>
                             </table>
                         </div>
                     </flux:card>
                 @endif
+
 
             </div>
 
@@ -270,10 +311,14 @@ new class extends Component {
                             </div>
                         @endif
 
-                        <div class="flex justify-between gap-2">
+                        {{--
+
+                       <div class="flex justify-between gap-2">
                             <dt class="text-zinc-400">Criada por</dt>
                             <dd class="font-medium">{{ $manutencao->createdBy->name }}</dd>
                         </div>
+
+                        --}}
 
                         <flux:separator variant="subtle" />
 
@@ -319,6 +364,12 @@ new class extends Component {
                         @endif
 
                         <flux:separator variant="subtle" class="my-1" wire:key="separator-{{ $manutencao->id }}" />
+
+                        <flux:button wire:click="openModal" wire:navigate
+                            class="w-full justify-start" variant="filled" icon="pencil"
+                        >
+                            Editar
+                        </flux:button>
 
                         <flux:button wire:key="btn-apagar-{{ $manutencao->id }}"
                                      wire:click="delete"

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('maintenance_plan_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('resource_id')->constrained();
-            $table->foreignId('created_by')->constrained('users');
+            #$table->foreignId('created_by')->constrained('users');
             $table->date('scheduled_at')->nullable();
             $table->timestamp('done_at')->nullable();
             $table->string('status')->default('pending');

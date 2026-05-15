@@ -36,11 +36,12 @@ class MaintenancePlan extends Model
 
     public function parts()
     {
-        return $this->hasMany(PlanPart::class);
+        return $this->belongsToMany(Part::class, 'plan_parts', 'maintenance_plan_id', 'part_id')
+            ->withPivot('quantity');
     }
 
     public function planParts(): HasMany
     {
-        return $this->hasMany(PlanPart::class);
+        return $this->hasMany(PlanPart::class, 'maintenance_plan_id');
     }
 }
