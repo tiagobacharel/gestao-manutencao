@@ -22,12 +22,6 @@ new class extends Component
     public array $photos = [];
     public array $existingPhotos = [];
 
-    protected function rules(): array
-    {
-        return array_merge(Resource::rules(), [
-            'photos.*' => ['nullable', 'image', 'max:4096'],
-        ]);
-    }
 
     public function mount(?Resource $recurso = null)
     {
@@ -62,8 +56,13 @@ new class extends Component
 
     public function save()
     {
-        $validated = $this->validate(Resource::rules());
-        $validated = $this->validate(ResourcePhoto::rules());
+        $this->validate(
+            array_merge(
+                Resource::rules(),
+                ResourcePhoto::rules()
+            )
+        );
+
 
         $this->recurso->fill([
             'name'        => $this->name,
@@ -96,6 +95,7 @@ new class extends Component
             <div class="space-y-6">
                 <flux:input
                     label="Nome"
+                    name="name"
                     wire:model.blur="name"
                     placeholder="Ex: Projetor Sala A"
                     copyable
@@ -103,16 +103,17 @@ new class extends Component
 
                 <flux:textarea
                     label="Descrição"
+                    name="description"
                     wire:model.blur="description"
                     placeholder="Detalhes do recurso..."
                 />
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <flux:input label="Localização" wire:model.blur="location" icon="map-pin" />
-                    <flux:input label="Secção / Departamento" wire:model.blur="section" icon="building-office" />
+                    <flux:input label="Localização" name="location" wire:model.blur="location" icon="map-pin" />
+                    <flux:input label="Secção / Departamento" name="section" wire:model.blur="section" icon="building-office" />
                 </div>
 
-                <flux:select label="Status" wire:model="status">
+                <flux:select label="Status" name="status" wire:model="status">
                     <flux:select.option value="active">Ativo</flux:select.option>
                     <flux:select.option value="inactive">Inativo</flux:select.option>
                 </flux:select>

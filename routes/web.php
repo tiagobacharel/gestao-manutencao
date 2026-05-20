@@ -12,6 +12,11 @@ Volt::route('/recurso/{recurso}', 'recursos.⚡show')->name('resource.show');
 Volt::route('/manutencoes', 'manutencoes.⚡index')->name('manutencoes.index');
 Volt::route('/manutencoes/{manutencao}', 'manutencoes.⚡show')->name('manutencoes.show');
 
+
+Volt::route('/planos_manutencoes', 'planos_manutencoes.⚡index')->name('planos_manutencoes.index');
+Volt::route('/planos_manutencoes/{plano_manutencao}', 'planos_manutencoes.⚡show')->name('planos_manutencoes.show');
+
+
 Volt::route('/pecas', 'pecas.⚡index')->name('pecas.index');
 Volt::route('/pecas/{part}', 'pecas.⚡show')->name('pecas.show');
 

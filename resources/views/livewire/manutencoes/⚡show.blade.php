@@ -10,28 +10,17 @@ new class extends Component {
     public function rendering($view): void
     {
         $view->layoutData(['title' => "Manutenção #{$this->manutencao->id}"]);
-        $this->manutencao->loadMissing(['resource', 'plan.planParts', 'createdBy', 'parts']);
+        $this->manutencao->loadMissing(['resource', 'plan.planParts', 'parts']);
     }
 
-    public function markDone(): void
+    public function updateStatus(string $status): void
     {
-        $this->manutencao->update(['status' => 'done', 'done_at' => now()]);
+        $this->manutencao->update([
+            'status'  => $status,
+            'done_at' => $status === 'done' ? now() : null
+        ]);
     }
 
-    public function markInProgress(): void
-    {
-        $this->manutencao->update(['status' => 'in_progress', 'done_at' => null]);
-    }
-
-    public function markCancelled(): void
-    {
-        $this->manutencao->update(['status' => 'cancelled', 'done_at' => null]);
-    }
-
-    public function reopen(): void
-    {
-        $this->manutencao->update(['status' => 'pending', 'done_at' => null]);
-    }
 
     public function delete(): void
     {
@@ -70,12 +59,7 @@ new class extends Component {
             </div>
 
             @php
-                $badge = match($manutencao->status) {
-                    'done'        => ['color' => 'green',  'icon' => 'check-circle', 'label' => 'Concluída'],
-                    'in_progress' => ['color' => 'blue',   'icon' => 'wrench',       'label' => 'Em Progresso'],
-                    'cancelled'   => ['color' => 'red',    'icon' => 'x-circle',     'label' => 'Cancelada'],
-                    default       => ['color' => 'yellow', 'icon' => 'clock',        'label' => 'Pendente'],
-                };
+                $badge = $manutencao->status_badge;
             @endphp
             <flux:badge color="{{ $badge['color'] }}" icon="{{ $badge['icon'] }}" size="lg">
                 {{ $badge['label'] }}
@@ -106,7 +90,7 @@ new class extends Component {
                 @endif
 
                 @if($showModal2)
-                    <livewire:manutencoes-pecas.modal :manutencao="$manutencao" />
+                    <livewire:manutencoes.pecas_modal :manutencao="$manutencao" />
                 @endif
 
                 {{-- Peças utilizadas --}}
@@ -144,8 +128,11 @@ new class extends Component {
                                         <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
                                             {{ $part->reference ?? '—' }}
                                         </td>
-                                        <td class="py-2 pr-4 font-medium">{{ $part->name }}</td>
-
+                                        <td class="py-2 pr-4 font-medium">
+                                            <a href="{{ route('pecas.show', $part) }}" wire:navigate class="hover:underline text-zinc-800 dark:text-white">
+                                                {{ $part->name }}
+                                            </a>
+                                        </td>
                                         <!-- Dados Transacionais (Lidos da tabela Pivot) -->
                                         <td class="py-2 pr-4 text-right">{{ $part->pivot->quantity }}</td>
                                         <td class="py-2 pr-4 text-right text-zinc-500">
@@ -161,7 +148,7 @@ new class extends Component {
                                 <tr class="border-t-2 border-zinc-300 dark:border-zinc-600">
                                     <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total</td>
                                     <td class="pt-3 text-right font-bold text-base">
-                                        {{ number_format($manutencao->parts->sum(fn($part) => $part->pivot->quantity * $part->pivot->unit_cost_at_time), 2, ',', '.') }}&nbsp;€
+                                        {{ number_format($manutencao->total_cost, 2, ',', '.') }}&nbsp;€
                                     </td>
                                 </tr>
                                 </tfoot>
@@ -169,9 +156,7 @@ new class extends Component {
                         </div>
                         @if($manutencao->plan && $manutencao->plan->planParts->isNotEmpty() && $manutencao->parts->isNotEmpty())
                             @php
-                                $custoReal = $manutencao->parts->sum(fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time);
-                                $custoPrevisto = $manutencao->plan->planParts->sum(fn($p) => $p->quantity * ($p->part?->current_unit_cost ?? 0));
-                                $desvio = $custoReal - $custoPrevisto;
+                                $desvio = $manutencao->cost_deviation;
                             @endphp
 
                             <div class="flex items-center justify-end gap-2 pt-1">
@@ -223,8 +208,11 @@ new class extends Component {
                                         </td>
 
                                         <!-- 2. Nome/Descrição com navegação segura -->
+
                                         <td class="py-2 pr-4 font-medium">
-                                            {{ $planPart->part?->name ?? 'Peça Não Encontrada ou Apagada' }}
+                                            <a href="{{ route('pecas.show', $part) }}" wire:navigate class="hover:underline text-zinc-800 dark:text-white">
+                                                {{ $planPart->part?->name ?? 'Peça Não Encontrada ou Apagada' }}
+                                            </a>
                                         </td>
 
                                         <!-- 3. Quantidade do Plano -->
@@ -249,7 +237,7 @@ new class extends Component {
                                     <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total previsto</td>
                                     <!-- 6. Total Geral do Rodapé Seguro -->
                                     <td class="pt-3 text-right font-bold text-base">
-                                        {{ number_format($manutencao->plan->planParts->sum(fn($p) => $p->quantity * ($p->part?->current_unit_cost ?? 0)), 2, ',', '.') }}&nbsp;€
+                                        {{ number_format($manutencao->plan->estimated_cost, 2, ',', '.') }}&nbsp;€
                                     </td>
                                 </tr>
                                 </tfoot>
@@ -290,7 +278,9 @@ new class extends Component {
                             <dt class="text-zinc-400">Plano</dt>
                             <dd class="text-right">
                                 @if($manutencao->plan)
-                                    <flux:badge color="purple" size="sm">{{ $manutencao->plan->name }}</flux:badge>
+                                    <a href="{{ route('planos_manutencoes.show', $manutencao->plan) }}" wire:navigate>
+                                        <flux:badge color="purple" size="sm">{{ $manutencao->plan->name }}</flux:badge>
+                                    </a>
                                 @else
                                     <span class="text-zinc-400">Sem plano</span>
                                 @endif
@@ -334,30 +324,30 @@ new class extends Component {
 
                         @if($manutencao->status === 'pending')
                             <div class="flex flex-col gap-2" wire:key="status-pending-block-{{ $manutencao->id }}">
-                                <flux:button wire:key="btn-iniciar-pending-{{ $manutencao->id }}" wire:click="markInProgress" variant="filled" icon="play" class="w-full justify-start">
+                                <flux:button wire:key="btn-iniciar-pending-{{ $manutencao->id }}" wire:click="updateStatus('in_progress')" variant="filled" icon="play" class="w-full justify-start">
                                     Iniciar
                                 </flux:button>
-                                <flux:button wire:key="btn-concluir-pending-{{ $manutencao->id }}" wire:click="markDone" variant="primary" icon="check" class="w-full justify-start">
+                                <flux:button wire:key="btn-concluir-pending-{{ $manutencao->id }}" wire:click="updateStatus('done')" variant="primary" icon="check" class="w-full justify-start">
                                     Marcar como Concluída
                                 </flux:button>
-                                <flux:button wire:key="btn-cancelar-pending-{{ $manutencao->id }}" wire:click="markCancelled" variant="danger" icon="x-mark" class="w-full justify-start">
+                                <flux:button wire:key="btn-cancelar-pending-{{ $manutencao->id }}" wire:click="updateStatus('cancelled')" variant="danger" icon="x-mark" class="w-full justify-start">
                                     Cancelar
                                 </flux:button>
                             </div>
 
                         @elseif($manutencao->status === 'in_progress')
                             <div class="flex flex-col gap-2" wire:key="status-inprogress-block-{{ $manutencao->id }}">
-                                <flux:button wire:key="btn-concluir-progress-{{ $manutencao->id }}" wire:click="markDone" variant="primary" icon="check" class="w-full justify-start">
+                                <flux:button wire:key="btn-concluir-progress-{{ $manutencao->id }}" wire:click="updateStatus('done')" variant="primary" icon="check" class="w-full justify-start">
                                     Marcar como Concluída
                                 </flux:button>
-                                <flux:button wire:key="btn-cancelar-progress-{{ $manutencao->id }}" wire:click="markCancelled" variant="danger" icon="x-mark" class="w-full justify-start">
+                                <flux:button wire:key="btn-cancelar-progress-{{ $manutencao->id }}" wire:click="updateStatus('cancelled')" variant="danger" icon="x-mark" class="w-full justify-start">
                                     Cancelar
                                 </flux:button>
                             </div>
 
                         @elseif(in_array($manutencao->status, ['done', 'cancelled']))
                             <div class="flex flex-col gap-2" wire:key="status-closed-block-{{ $manutencao->id }}">
-                                <flux:button wire:key="btn-reabrir-closed-{{ $manutencao->id }}" wire:click="reopen" variant="subtle" icon="arrow-uturn-left" class="w-full justify-start">
+                                <flux:button wire:key="btn-reabrir-closed-{{ $manutencao->id }}" wire:click="updateStatus('pending')" variant="subtle" icon="arrow-uturn-left" class="w-full justify-start">
                                     Reabrir como Pendente
                                 </flux:button>
                             </div>

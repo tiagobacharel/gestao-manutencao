@@ -79,7 +79,7 @@ new class extends Component {
         <flux:separator variant="subtle" />
 
         @if($showModal)
-            <livewire:pecas.modal />
+            <livewire:pecas_modal />
         @endif
 
         <x-filtros-bar :config="$configFiltros" :valores="$valoresAtuais" />

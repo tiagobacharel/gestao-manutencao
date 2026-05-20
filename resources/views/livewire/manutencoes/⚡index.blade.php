@@ -87,7 +87,7 @@ new class extends Component {
             ],
 
             'manutencoes' => Maintenance::query()
-                ->with(['resource', 'plan', 'createdBy', 'parts'])
+                ->with(['resource', 'plan', 'parts'])
                 ->when($this->search, fn($q) => $q->where(fn($sub) => $sub->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->search}%"))
                     ->orWhere('notes', 'like', "%{$this->search}%")
                 )
@@ -179,14 +179,18 @@ new class extends Component {
 
                             <flux:table.cell>
                                 <div class="flex flex-col">
-                                    <span class="font-medium text-sm">{{ $manutencao->resource->name }}</span>
+                                    <a href="{{ route('resource.show', $manutencao->resource) }}" wire:navigate>
+                                        <span class="font-medium text-sm">{{ $manutencao->resource->name }}</span>
+                                    </a>
                                     <span class="text-xs text-zinc-400">{{ $manutencao->resource->location }}</span>
                                 </div>
                             </flux:table.cell>
 
                             <flux:table.cell>
                                 @if($manutencao->plan)
-                                    <flux:badge color="purple" size="sm">{{ $manutencao->plan->name }}</flux:badge>
+                                    <a href="{{ route('planos_manutencoes.show', $manutencao->plan) }}" wire:navigate>
+                                        <flux:badge color="purple" size="sm">{{ $manutencao->plan->name }}</flux:badge>
+                                    </a>
                                 @else
                                     <span class="text-xs text-zinc-400">Sem plano</span>
                                 @endif
@@ -194,12 +198,7 @@ new class extends Component {
 
                             <flux:table.cell>
                                 @php
-                                    $badge = match($manutencao->status) {
-                                        'done'        => ['color' => 'green',  'icon' => 'check-circle', 'label' => 'Concluída'],
-                                        'in_progress' => ['color' => 'blue',   'icon' => 'wrench',       'label' => 'Em progresso'],
-                                        'cancelled'   => ['color' => 'red',    'icon' => 'x-circle',     'label' => 'Cancelada'],
-                                        default       => ['color' => 'yellow', 'icon' => 'clock',        'label' => 'Pendente'],
-                                    };
+                                    $badge = $manutencao->status_badge;
                                 @endphp
                                 <flux:badge color="{{ $badge['color'] }}" icon="{{ $badge['icon'] }}" size="sm">
                                     {{ $badge['label'] }}
@@ -217,7 +216,7 @@ new class extends Component {
 
                             <flux:table.cell>
                                 @php
-                                    $total = $manutencao->parts->sum(fn($part) => $part->pivot->quantity * $part->pivot->unit_cost_at_time)
+                                    $total = $manutencao->total_cost
                                 @endphp
                                 @if($total > 0)
                                     <span class="text-sm font-medium">

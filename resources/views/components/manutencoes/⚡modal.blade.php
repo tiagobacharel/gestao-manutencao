@@ -15,15 +15,25 @@ new class extends Component
     public $status = 'pending';
     public $notes = '';
 
-    protected function rules(): array
+    public string $recurso_search = '';
+    public bool $recurso_open = false;
+
+    public string $plano_search = '';
+    public bool $plano_open = false;
+
+
+    public function selectRecurso(int $id, string $nome): void
     {
-        return [
-            'maintenance_plan_id' => ['nullable', 'exists:maintenance_plans,id'],
-            'resource_id'         => ['required', 'exists:resources,id'],
-            'scheduled_at'        => ['nullable', 'date'],
-            'status'              => ['required', 'in:pending,in_progress,done,cancelled'],
-            'notes'               => ['nullable', 'string'],
-        ];
+        $this->resource_id    = $id;
+        $this->recurso_search = $nome;
+        $this->recurso_open   = false;
+    }
+
+    public function selectPlano(int $id, string $nome): void
+    {
+        $this->maintenance_plan_id = $id;
+        $this->plano_search        = $nome;
+        $this->plano_open          = false;
     }
 
     public function mount(?Maintenance $manutencao = null): void
@@ -35,6 +45,11 @@ new class extends Component
             $this->scheduled_at         = $manutencao->scheduled_at?->format('Y-m-d') ?? '';
             $this->status               = $manutencao->status;
             $this->notes                = $manutencao->notes ?? '';
+
+            $this->recurso_search = $manutencao->resource->name ?? '';
+
+            $this->plano_search = $manutencao->maintenancePlan->name ?? '';
+
         } else {
             $this->manutencao = new Maintenance();
         }
@@ -42,7 +57,7 @@ new class extends Component
 
     public function save(): void
     {
-        $this->validate();
+        $this->validate(Maintenance::rules());
 
         $this->manutencao->fill([
             'maintenance_plan_id' => $this->maintenance_plan_id ?: null,
@@ -70,8 +85,20 @@ new class extends Component
     public function with(): array
     {
         return [
-            'recursos' => Resource::orderBy('name')->pluck('name', 'id'),
-            'planos'   => MaintenancePlan::orderBy('name')->pluck('name', 'id'),
+            'recursos' => Resource::orderBy('name')
+                ->when(
+                    strlen($this->recurso_search) >= 1,
+                    fn($q) => $q->where('name', 'like', '%' . $this->recurso_search . '%')
+                )
+                ->limit(10)
+                ->pluck('name', 'id'),
+            'planos' => MaintenancePlan::orderBy('name')
+                ->when(
+                    strlen($this->plano_search) >= 1,
+                    fn($q) => $q->where('name', 'like', '%' . $this->plano_search . '%')
+                )
+                ->limit(10)
+                ->pluck('name', 'id'),
         ];
     }
 };
@@ -94,29 +121,100 @@ new class extends Component
 
             <div class="space-y-4">
 
-                <flux:select
-                    label="Recurso"
-                    wire:model="resource_id"
-                    placeholder="Seleciona um recurso..."
-                >
-                    @foreach($recursos as $id => $nome)
-                        <flux:select.option value="{{ $id }}">{{ $nome }}</flux:select.option>
-                    @endforeach
-                </flux:select>
-                @error('resource_id')
-                <flux:error>{{ $message }}</flux:error>
-                @enderror
+                <div x-data="{ open: @entangle('recurso_open') }">
+                    <flux:input
+                        label="Recurso"
+                        wire:model.live.debounce.300ms="recurso_search"
+                        wire:focus="$set('recurso_open', true)"
+                        @click="open = true"
+                        @keydown.escape="open = false"
+                        @keydown.tab="open = false"
+                        placeholder="Pesquisar recurso..."
+                        autocomplete="off"
+                        icon="magnifying-glass"
+                    />
 
-                <flux:select
-                    label="Plano de manutenção"
-                    wire:model="maintenance_plan_id"
-                    placeholder="Sem plano (opcional)"
-                >
-                    <flux:select.option value="">Sem plano</flux:select.option>
-                    @foreach($planos as $id => $nome)
-                        <flux:select.option value="{{ $id }}">{{ $nome }}</flux:select.option>
-                    @endforeach
-                </flux:select>
+                    <div class="relative">
+                        <ul
+                            x-show="open"
+                            x-transition:enter="transition ease-out duration-100"
+                            x-transition:enter-start="opacity-0 scale-95"
+                            x-transition:enter-end="opacity-100 scale-100"
+                            x-transition:leave="transition ease-in duration-75"
+                            x-transition:leave-start="opacity-100 scale-100"
+                            x-transition:leave-end="opacity-0 scale-95"
+                            @click.outside="open = false"
+                            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg"
+                        >
+                            @forelse($recursos as $id => $nome)
+                                <li
+                                    wire:click="selectRecurso({{ $id }}, '{{ addslashes($nome) }}')"
+                                    @click="open = false"
+                                    class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
+                                >
+                                    {{ $nome }}
+                                </li>
+                            @empty
+                                <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">
+                                    Nenhum recurso encontrado
+                                </li>
+                            @endforelse
+                        </ul>
+                    </div>
+
+                    <flux:error name="resource_id" />
+                </div>
+
+                <div x-data="{ open: @entangle('plano_open') }">
+                    <flux:input
+                        label="Plano de manutenção"
+                        wire:model.live.debounce.300ms="plano_search"
+                        wire:focus="$set('plano_open', true)"
+                        @click="open = true"
+                        @keydown.escape="open = false"
+                        @keydown.tab="open = false"
+                        placeholder="Sem plano (opcional)"
+                        autocomplete="off"
+                        icon="magnifying-glass"
+                    />
+
+                    <div class="relative">
+                        <ul
+                            x-show="open"
+                            x-transition:enter="transition ease-out duration-100"
+                            x-transition:enter-start="opacity-0 scale-95"
+                            x-transition:enter-end="opacity-100 scale-100"
+                            x-transition:leave="transition ease-in duration-75"
+                            x-transition:leave-start="opacity-100 scale-100"
+                            x-transition:leave-end="opacity-0 scale-95"
+                            @click.outside="open = false"
+                            class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg"
+                        >
+                            <li
+                                wire:click="$set('maintenance_plan_id', ''); $set('plano_search', ''); $set('plano_open', false)"
+                                @click="open = false"
+                                class="cursor-pointer px-3 py-2 text-sm text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 italic"
+                            >
+                                Sem plano
+                            </li>
+                            @forelse($planos as $id => $nome)
+                                <li
+                                    wire:click="selectPlano({{ $id }}, '{{ addslashes($nome) }}')"
+                                    @click="open = false"
+                                    class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                                >
+                                    {{ $nome }}
+                                </li>
+                            @empty
+                                <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">
+                                    Nenhum plano encontrado
+                                </li>
+                            @endforelse
+                        </ul>
+                    </div>
+
+                    <flux:error name="maintenance_plan_id" />
+                </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <flux:input

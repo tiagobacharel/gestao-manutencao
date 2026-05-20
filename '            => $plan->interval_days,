@@ -1,0 +1,14 @@
+[90m= [39m[34;4mApp\Models\MaintenancePlan[39;24m {#8722
+    [34mid[39m: [35m22[39m,
+    [34mresource_id[39m: [35m47[39m,
+    [34mname[39m: [32m"[39m[32mNome do plano_Teste[39m[32m"[39m,
+    [34minterval_days[39m: [35m9[39m,
+    [34mdescription[39m: [32m"[39m[32mDescrição_Teste[39m[32m"[39m,
+    [34mis_active[39m: [35m1[39m,
+    [34mstarted_at[39m: [32m"[39m[32m2026-05-12 00:00:00[39m[32m"[39m,
+    [34memail_responsible[39m: [32m"[39m[32mjonoli9876@acanok.com[39m[32m"[39m,
+    [34mnotification_days_before[39m: [35m2[39m,
+    [34mlast_notified_at[39m: [36mnull[39m,
+    [34mcreated_at[39m: [32m"[39m[32m2026-05-19 08:13:23[39m[32m"[39m,
+    [34mupdated_at[39m: [32m"[39m[32m2026-05-19 08:13:23[39m[32m"[39m,
+  }

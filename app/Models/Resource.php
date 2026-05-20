@@ -39,5 +39,10 @@ class Resource extends Model
         return $this->hasMany(Maintenance::class);
     }
 
+    public function maintenancePlans(): HasMany
+    {
+        return $this->hasMany(MaintenancePlan::class);
+    }
+
 
 }

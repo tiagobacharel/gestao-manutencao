@@ -15,10 +15,14 @@ return new class extends Migration
             $table->id();
             $table->foreignId('resource_id')->constrained()->cascadeOnDelete();
             $table->string('name');
-            $table->unsignedInteger('interval_days');
+            $table->unsignedInteger('interval_value');
+            $table->enum('interval_unit', ['day', 'month', 'year']);
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
             $table->date('started_at')->nullable();
+            $table->string('email_responsible')->nullable();
+            $table->unsignedInteger('notification_days_before')->default(7);
+            $table->timestamp('last_notified_at')->nullable();
             $table->timestamps();
         });
     }

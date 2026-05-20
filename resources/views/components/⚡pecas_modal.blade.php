@@ -13,20 +13,6 @@ new class extends Component
     public int $stock_current = 0;
     public string $current_unit_cost = '0.00';
 
-    protected function rules(): array
-    {
-        $uniqueReference = $this->part && $this->part->exists
-            ? 'unique:parts,reference,' . $this->part->id
-            : 'unique:parts,reference';
-
-        return [
-            'reference'         => ['required', 'string', 'max:255', $uniqueReference],
-            'name'              => ['required', 'string', 'max:255'],
-            'description'       => ['nullable', 'string'],
-            'stock_current'     => ['required', 'integer', 'min:0'],
-            'current_unit_cost' => ['required', 'numeric', 'min:0'],
-        ];
-    }
 
     public function mount(?Part $part = null): void
     {
@@ -44,7 +30,7 @@ new class extends Component
 
     public function save()
     {
-        $validated = $this->validate();
+        $this->validate(Part::rules($this->part?->id));
 
         $this->part->fill([
             'reference'         => $this->reference,
@@ -74,6 +60,7 @@ new class extends Component
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <flux:input
                         label="Referência"
+                        name="reference"
                         wire:model.blur="reference"
                         placeholder="Ex: REF-001"
                         icon="tag"
@@ -81,6 +68,7 @@ new class extends Component
                     />
                     <flux:input
                         label="Nome"
+                        name="name"
                         wire:model.blur="name"
                         placeholder="Ex: Filtro de óleo"
                     />
@@ -88,6 +76,7 @@ new class extends Component
 
                 <flux:textarea
                     label="Descrição"
+                    name="description"
                     wire:model.blur="description"
                     placeholder="Detalhes da peça..."
                 />
@@ -95,6 +84,7 @@ new class extends Component
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <flux:input
                         label="Stock atual"
+                        name="stock"
                         wire:model.blur="stock_current"
                         type="number"
                         min="0"
@@ -102,6 +92,7 @@ new class extends Component
                     />
                     <flux:input
                         label="Custo unitário (€)"
+                        name="unit_cost"
                         wire:model.blur="current_unit_cost"
                         type="number"
                         min="0"

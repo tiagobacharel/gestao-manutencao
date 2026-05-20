@@ -17,7 +17,7 @@ new class extends Component {
     public function with(): array
     {
         return [
-            'manutencoes' => Maintenance::where('resource_id', $this->recurso->id)
+            'manutencoes' => $this->recurso->maintenances()
                 ->with(['plan', 'parts'])
                 ->latest('scheduled_at')
                 ->limit(10)
@@ -25,15 +25,12 @@ new class extends Component {
         ];
     }
 
-    public function activate(){
-        $this->recurso->status = 'active';
+    public function toggleStatus(): void
+    {
+        $this->recurso->status = $this->recurso->status === 'active' ? 'inactive' : 'active';
         $this->recurso->save();
     }
 
-    public function deactivate(){
-        $this->recurso->status = 'inactive';
-        $this->recurso->save();
-    }
 
     public bool $showModal = false;
 
@@ -127,12 +124,7 @@ new class extends Component {
                             <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                                 @foreach($manutencoes as $m)
                                     @php
-                                        $badge = match($m->status) {
-                                            'done'        => ['color' => 'green',  'icon' => 'check-circle', 'label' => 'Concluída'],
-                                            'in_progress' => ['color' => 'blue',   'icon' => 'wrench',       'label' => 'Em Progresso'],
-                                            'cancelled'   => ['color' => 'red',    'icon' => 'x-circle',     'label' => 'Cancelada'],
-                                            default       => ['color' => 'yellow', 'icon' => 'clock',        'label' => 'Pendente'],
-                                        };
+                                        $badge = $m->status_badge;
                                     @endphp
                                     <a href="{{ route('manutencoes.show', $m) }}" wire:navigate
                                        class="flex items-center justify-between py-3 gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800 -mx-1 px-1 rounded-lg transition-colors group">
@@ -153,9 +145,9 @@ new class extends Component {
                                             @if($m->parts->count())
                                                 <flux:badge color="zinc" size="sm">{{ $m->parts->count() }} peça(s)</flux:badge>
                                             @endif
-                                            @if($m->cost !== null)
+                                            @if($m->total_cost !== null)
                                                 <span class="text-sm font-semibold">
-                                                    {{ number_format($m->cost, 2, ',', '.') }} €
+                                                    {{ number_format($m->total_cost, 2, ',', '.') }} €
                                                 </span>
                                             @endif
                                             <flux:icon name="chevron-right" variant="micro"
@@ -174,9 +166,6 @@ new class extends Component {
                         <flux:text size="sm">Efetue operações diretas sobre este recurso do sistema.</flux:text>
 
                         <div class="flex flex-col gap-2">
-                            <flux:button variant="primary" icon="wrench" class="w-full justify-start">
-                                Agendar Manutenção
-                            </flux:button>
 
                             <flux:button wire:click="openModal" variant="filled" icon="pencil-square" class="w-full justify-start" >
                                 Editar
@@ -189,11 +178,11 @@ new class extends Component {
                             <flux:separator class="my-2" variant="subtle" />
 
                             @if($recurso->status === 'active')
-                                <flux:button wire:key="btn-deactivate-{{ $recurso->id }}" variant="danger" icon="power" class="w-full justify-start" wire:click="deactivate">
+                                <flux:button wire:key="btn-toggle-{{ $recurso->id }}" variant="danger" icon="power" class="w-full justify-start" wire:click="toggleStatus">
                                     Marcar como Inativo
                                 </flux:button>
                             @else
-                                <flux:button wire:key="btn-activate-{{ $recurso->id }}" variant="primary" icon="power" class="w-full justify-start" wire:click="activate">
+                                <flux:button wire:key="btn-toggle-{{ $recurso->id }}" variant="primary" icon="power" class="w-full justify-start" wire:click="toggleStatus">
                                     Ativar Equipamento
                                 </flux:button>
                             @endif

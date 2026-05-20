@@ -50,24 +50,11 @@ new class extends Component {
             </div>
 
             @php
-                $stockColor = match(true) {
-                    $part->stock_current === 0 => 'red',
-                    $part->stock_current <= 5  => 'yellow',
-                    default                    => 'green',
-                };
-                $stockLabel = match(true) {
-                    $part->stock_current === 0 => 'Sem stock',
-                    $part->stock_current <= 5  => 'Stock baixo',
-                    default                    => 'Em stock',
-                };
-                $stockIcon = match(true) {
-                    $part->stock_current === 0 => 'x-circle',
-                    $part->stock_current <= 5  => 'exclamation-triangle',
-                    default                    => 'check-circle',
-                };
+                $stockBadge = $part->stock_badge;
             @endphp
-            <flux:badge color="{{ $stockColor }}" icon="{{ $stockIcon }}" size="lg">
-                {{ $stockLabel }}
+
+            <flux:badge :color="$stockBadge['color']" :icon="$stockBadge['icon']" size="lg">
+                {{ $stockBadge['label'] }}
             </flux:badge>
         </div>
 
@@ -96,13 +83,13 @@ new class extends Component {
                         <div class="flex flex-col gap-1 p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
                             <flux:text size="sm" class="text-zinc-400">Quantidade atual</flux:text>
                             <span class="text-2xl font-bold">{{ $part->stock_current }}</span>
-                            <flux:badge color="{{ $stockColor }}" size="sm" class="w-fit">{{ $stockLabel }}</flux:badge>
+                            <flux:badge color="{{ $stockBadge['color'] }}" size="sm" class="w-fit">{{ $stockBadge['label'] }}</flux:badge>
                         </div>
 
                         <div class="flex flex-col gap-1 p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
                             <flux:text size="sm" class="text-zinc-400">Valor em stock</flux:text>
                             <span class="text-2xl font-bold">
-                                {{ number_format($part->stock_current * $part->current_unit_cost, 2, ',', '.') }} €
+                                {{ number_format($part->stock_value, 2, ',', '.') }} €
                             </span>
                             <flux:text size="sm" class="text-zinc-400">
                                 {{ $part->stock_current }} × {{ number_format($part->current_unit_cost, 2, ',', '.') }} €
@@ -195,7 +182,7 @@ new class extends Component {
             </div>
         </div>
         @if($showModal)
-            <livewire:pecas.modal :part="$part" />
+            <livewire:pecas_modal :part="$part" />
         @endif
 
     </flux:main>
