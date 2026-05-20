@@ -6,6 +6,7 @@ use App\Models\MaintenancePlan;
 use App\Models\Resource;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
+use Livewire\Attributes\Computed;
 
 new class extends Component {
     use WithPagination;
@@ -14,19 +15,47 @@ new class extends Component {
     public string $status = '';
     public string $sortBy = 'scheduled_at';
     public string $sortDir = 'desc';
+
+    // IDs reais usados quando o utilizador clica numa opção
     public $resource_id = '';
     public $plan_id = '';
+
+    // Texto digitado em tempo real nos inputs
+    public string $resourceSearch = '';
+    public string $planSearch = '';
 
     public function rendering($view)
     {
         $view->layoutData(['title' => 'Manutenções']);
     }
 
+    // Se qualquer campo de texto ou ID mudar, faz reset à paginação
     public function updated($propertyName): void
     {
-        if (in_array($propertyName, ['search', 'status', 'resource_id', 'plan_id'])) {
+        if (in_array($propertyName, ['search', 'status', 'resource_id', 'plan_id', 'resourceSearch', 'planSearch'])) {
             $this->resetPage();
+
+            // Se o utilizador começou a digitar de novo após ter escolhido algo,
+            // limpamos o ID antigo para o filtro passar a basear-se no texto escrito
+            if ($propertyName === 'resourceSearch' && $this->resource_id) {
+                $this->resource_id = '';
+            }
+            if ($propertyName === 'planSearch' && $this->plan_id) {
+                $this->plan_id = '';
+            }
         }
+    }
+
+    public function selectResource($id, $name): void
+    {
+        $this->resource_id = $id;
+        $this->resourceSearch = $name;
+    }
+
+    public function selectPlan($id, $name): void
+    {
+        $this->plan_id = $id;
+        $this->planSearch = $name;
     }
 
     public function sort(string $column): void
@@ -39,32 +68,45 @@ new class extends Component {
         }
     }
 
+    #[Computed]
+    public function searchedResources()
+    {
+        return Resource::whereHas('maintenances')
+            ->when($this->resourceSearch && !$this->resource_id, fn($q) => $q->where('name', 'like', "%{$this->resourceSearch}%"))
+            ->limit(10)
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    #[Computed]
+    public function searchedPlans()
+    {
+        return MaintenancePlan::whereHas('maintenances')
+            ->when($this->planSearch && !$this->plan_id, fn($q) => $q->where('name', 'like', "%{$this->planSearch}%"))
+            ->limit(10)
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
     public function with(): array
     {
         return [
             'configFiltros' => [
                 [
-                    'type' => 'text',
-                    'model' => 'search',
-                    'placeholder' => 'Procurar manutenções...',
-                ],
-                [
-                    'type' => 'select',
+                    'type' => 'custom-dropdown',
                     'model' => 'resource_id',
+                    'searchModel' => 'resourceSearch',
                     'label' => 'Todos os recursos',
-                    // Carrega apenas recursos com pelo menos uma manutenção
-                    'options' => Resource::whereHas('maintenances')
-                        ->pluck('name', 'id')
-                        ->toArray(),
+                    'selectMethod' => 'selectResource',
+                    'computedOptions' => $this->searchedResources,
                 ],
                 [
-                    'type' => 'select',
+                    'type' => 'custom-dropdown',
                     'model' => 'plan_id',
+                    'searchModel' => 'planSearch',
                     'label' => 'Todos os planos',
-                    // Carrega apenas planos com pelo menos uma manutenção
-                    'options' => MaintenancePlan::whereHas('maintenances')
-                        ->pluck('name', 'id')
-                        ->toArray(),
+                    'selectMethod' => 'selectPlan',
+                    'computedOptions' => $this->searchedPlans,
                 ],
                 [
                     'type' => 'select',
@@ -84,17 +126,25 @@ new class extends Component {
                 'status' => $this->status,
                 'resource_id' => $this->resource_id,
                 'plan_id' => $this->plan_id,
+                'resourceSearch' => $this->resourceSearch,
+                'planSearch' => $this->planSearch,
             ],
 
             'manutencoes' => Maintenance::query()
                 ->with(['resource', 'plan', 'parts'])
                 ->when($this->search, fn($q) => $q->where(fn($sub) => $sub->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->search}%"))
                     ->orWhere('notes', 'like', "%{$this->search}%")
-                )
-                )
+                ))
                 ->when($this->status, fn($q) => $q->where('status', $this->status))
+
+                // SOLUÇÃO: Filtra por ID se já escolheu, ou por texto se estiver apenas a escrever
                 ->when($this->resource_id, fn($q) => $q->where('resource_id', $this->resource_id))
+                ->when(!$this->resource_id && $this->resourceSearch, fn($q) => $q->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->resourceSearch}%")))
+
+                // SOLUÇÃO: Filtra por ID se já escolheu, ou por texto se estiver apenas a escrever
                 ->when($this->plan_id, fn($q) => $q->where('maintenance_plan_id', $this->plan_id))
+                ->when(!$this->plan_id && $this->planSearch, fn($q) => $q->whereHas('plan', fn($p) => $p->where('name', 'like', "%{$this->planSearch}%")))
+
                 ->when(
                     $this->sortBy === 'cost',
                     fn($q) => $q->orderBy(
@@ -109,10 +159,10 @@ new class extends Component {
     }
 
     public bool $showModal = false;
-
     public function openModal() { $this->showModal = true; }
 };
 ?>
+
 
 
 <div>

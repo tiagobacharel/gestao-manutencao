@@ -4,6 +4,7 @@ use App\Models\MaintenancePlan;
 use App\Models\Resource;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
+use Livewire\Attributes\Computed;
 
 new class extends Component {
     use WithPagination;
@@ -14,6 +15,8 @@ new class extends Component {
     public string $sortBy = 'name';
     public string $sortDir = 'asc';
 
+    public string $resourceSearch = '';
+
     public function rendering($view): void
     {
         $view->layoutData(['title' => 'Planos de Manutenção']);
@@ -21,9 +24,22 @@ new class extends Component {
 
     public function updated($propertyName): void
     {
-        if (in_array($propertyName, ['search', 'status', 'resource_id'])) {
+        if (in_array($propertyName, ['search', 'status', 'resource_id', 'resourceSearch'])) {
             $this->resetPage();
+
+            // Se o utilizador começar a digitar de novo após ter escolhido algo,
+            // limpamos o ID antigo para o filtro passar a basear-se no texto escrito
+            if ($propertyName === 'resourceSearch' && $this->resource_id) {
+                $this->resource_id = '';
+            }
         }
+    }
+
+    // ADICIONADO: Método necessário para quando o utilizador clica numa opção da lista
+    public function selectResource($id, $name): void
+    {
+        $this->resource_id = $id;
+        $this->resourceSearch = $name;
     }
 
     public function sort(string $column): void
@@ -43,6 +59,17 @@ new class extends Component {
         $this->showModal = true;
     }
 
+    #[Computed]
+    public function searchedResources()
+    {
+        // Alterado para procurar em planos (maintenancePlans) já que estamos na página de planos
+        return Resource::whereHas('maintenancePlans')
+            ->when($this->resourceSearch && !$this->resource_id, fn($q) => $q->where('name', 'like', "%{$this->resourceSearch}%"))
+            ->limit(10)
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
     public function with(): array
     {
         return [
@@ -53,12 +80,13 @@ new class extends Component {
                     'placeholder' => 'Procurar planos...',
                 ],
                 [
-                    'type'    => 'select',
-                    'model'   => 'resource_id',
-                    'label'   => 'Todos os recursos',
-                    'options' => Resource::whereHas('maintenancePlans')
-                        ->pluck('name', 'id')
-                        ->toArray(),
+                    'type' => 'custom-dropdown',
+                    'model' => 'resource_id',
+                    'searchModel' => 'resourceSearch',
+                    'label' => 'Todos os recursos',
+                    'selectMethod' => 'selectResource',
+                    // CORRIGIDO: Chamada explícita como método () evita a exceção do Volt
+                    'computedOptions' => $this->searchedResources(),
                 ],
                 [
                     'type'    => 'select',
@@ -75,6 +103,7 @@ new class extends Component {
                 'search'      => $this->search,
                 'status'      => $this->status,
                 'resource_id' => $this->resource_id,
+                'resourceSearch' => $this->resourceSearch, // Adicionado para controlo seguro na Blade
             ],
 
             'planos' => MaintenancePlan::query()
@@ -84,7 +113,10 @@ new class extends Component {
                         ->orWhere('description', 'like', "%{$this->search}%")
                         ->orWhereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->search}%"));
                 }))
+                // CORRIGIDO: Filtra por ID se já clicou, ou pelo texto em tempo real se estiver apenas a escrever
                 ->when($this->resource_id, fn($q) => $q->where('resource_id', $this->resource_id))
+                ->when(!$this->resource_id && $this->resourceSearch, fn($q) => $q->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->resourceSearch}%")))
+
                 ->when($this->status !== '', fn($q) => $q->where('is_active', (bool) $this->status))
                 ->orderBy($this->sortBy, $this->sortDir)
                 ->paginate(13),

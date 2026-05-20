@@ -19,7 +19,7 @@
         <flux:navbar.item icon="home" href="/" wire:navigate>Home</flux:navbar.item>
         <flux:navbar.item icon="calendar" href="/calendar" wire:navigate>Calendário</flux:navigate>
         <flux:navbar.item icon="wrench" href="/manutencoes" wire:navigate>Manutenções</flux:navbar.item>
-        <flux:sidebar.item icon="document-text" :badge="App\Models\MaintenancePlan::count()" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:sidebar.item>
+        <flux:navbar.item icon="document-text" :badge="App\Models\MaintenancePlan::count()" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:navbar.item>
         <flux:navbar.item icon="inbox" :badge="App\Models\Resource::count()" href="/recursos" wire:navigate>Recursos</flux:navbar.item>
         <flux:navbar.item icon="clipboard-document-list" :badge="App\Models\Part::count()" href="/pecas" wire:navigate>Peças</flux:navbar.item>
     </flux:navbar>

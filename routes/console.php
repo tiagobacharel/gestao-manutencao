@@ -1,8 +1,9 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+Schedule::command('maintenances:notify-upcoming')
+    ->dailyAt('08:00')                 // corre todos os dias às 08:00
+    ->withoutOverlapping()             // evita execuções simultâneas
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/maintenances-notify.log'));
