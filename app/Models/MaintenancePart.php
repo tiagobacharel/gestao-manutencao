@@ -28,4 +28,13 @@ class MaintenancePart extends Model
     {
         return $this->quantity * $this->unit_cost_at_time;
     }
+
+    public static function rules()
+    {
+        return [
+            'maintenance_parts'            => ['nullable', 'array'],
+            'maintenance_parts.*.part_id'  => ['required', 'exists:parts,id'],
+            'maintenance_parts.*.quantity' => ['required', 'integer', 'min:1'],
+        ];
+    }
 }

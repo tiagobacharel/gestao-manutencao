@@ -26,4 +26,13 @@ class PlanPart extends Model
     {
         return $this->belongsTo(MaintenancePlan::class, 'maintenance_plan_id');
     }
+
+    public static function rules()
+    {
+        return [
+            'plan_parts'            => ['nullable', 'array'],
+            'plan_parts.*.part_id'  => ['required', 'exists:parts,id'],
+            'plan_parts.*.quantity' => ['required', 'integer', 'min:1'],
+        ];
+    }
 }

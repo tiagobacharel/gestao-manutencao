@@ -21,24 +21,23 @@ new class extends Component {
         $view->layoutData(['title' => 'Calendário']);
     }
 
-    public function previousMonth(): void
+    public function alterarMes(string $acao): void
     {
-        $date = Carbon::create($this->year, $this->month)->subMonth();
+        $date = Carbon::create($this->year, $this->month);
+
+        $date = match ($acao) {
+            'anterior' => $date->subMonth(),
+            'seguinte' => $date->addMonth(),
+            default    => now(),
+        };
+
         $this->year = $date->year;
         $this->month = $date->month;
     }
 
-    public function nextMonth(): void
+    public function getIsCurrentMonthProperty(): bool
     {
-        $date = Carbon::create($this->year, $this->month)->addMonth();
-        $this->year = $date->year;
-        $this->month = $date->month;
-    }
-
-    public function goToday(): void
-    {
-        $this->year = now()->year;
-        $this->month = now()->month;
+        return $this->year === now()->year && $this->month === now()->month;
     }
 
     public function with(): array
@@ -141,14 +140,14 @@ new class extends Component {
             <flux:heading size="xl" level="1" class="capitalize">{{ $monthLabel }}</flux:heading>
 
             <div class="flex items-center gap-2">
-                @if(!$isCurrentMonth)
-                    <flux:button wire:click="goToday" variant="subtle" size="sm">Hoje</flux:button>
+                @if(!$this->isCurrentMonth)
+                    <flux:button wire:click="alterarMes('hoje')" wire:loading.attr="disabled" variant="subtle" size="sm">Hoje</flux:button>
                 @endif
-                <flux:button wire:click="previousMonth" icon="chevron-left" variant="subtle" size="sm"
-                             label="Mês anterior"/>
-                <flux:button wire:click="nextMonth" icon="chevron-right" variant="subtle" size="sm"
-                             label="Próximo mês"/>
+
+                <flux:button wire:click="alterarMes('anterior')" wire:loading.attr="disabled" icon="chevron-left" variant="subtle" size="sm" label="Mês anterior"/>
+                <flux:button wire:click="alterarMes('seguinte')" wire:loading.attr="disabled" icon="chevron-right" variant="subtle" size="sm" label="Próximo mês"/>
             </div>
+
         </div>
 
         <flux:separator variant="subtle"/>

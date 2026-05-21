@@ -14,16 +14,14 @@ new class extends Component {
         $this->ano = now()->year;
     }
 
-    public function anoAnterior(): void
+    public function alterarAno(string $direcao): void
     {
-        $this->ano--;
-    }
-
-    public function anoSeguinte(): void
-    {
-        if ($this->ano < now()->year) {
-            $this->ano++;
+        if ($direcao === 'anterior') {
+            $this->ano--;
+            return;
         }
+
+        $this->ano = min($this->ano + 1, now()->year);
     }
 
     public function rendering($view): void
@@ -58,7 +56,6 @@ new class extends Component {
 
         $emProgresso = Maintenance::where('status', 'in_progress')->count();
 
-        // 1. Manutenções já agendadas (como antes)
         $manutencoes = Maintenance::with(['resource', 'plan'])
             ->whereIn('status', ['pending', 'in_progress'])
             ->whereNotNull('scheduled_at')
@@ -66,7 +63,6 @@ new class extends Component {
             ->limit(4)
             ->get();
 
-// 2. Planos ativos que NÃO têm manutenção pendente/em progresso associada
         $planosSeemManutencaoPendente = MaintenancePlan::with('resource')
             ->where('is_active', true)
             ->whereNotExists(function ($query) {
@@ -77,7 +73,6 @@ new class extends Component {
             })
             ->get()
             ->map(function (MaintenancePlan $plan) {
-                // Calcula a próxima data com base no intervalo do plano
                 $proxima = $plan->started_at
                     ? Carbon::parse($plan->started_at)
                     : Carbon::now();
@@ -86,12 +81,11 @@ new class extends Component {
                     $proxima->add($plan->interval_value, $plan->interval_unit);
                 }
 
-                // Simula um objeto Maintenance para uniformizar os dados
                 return (object)[
                     'id' => null,
                     'resource' => $plan->resource,
                     'plan' => $plan,
-                    'status' => 'planned',      // status virtual
+                    'status' => 'planned',
                     'scheduled_at' => $proxima->toDateString(),
                     'notes' => $plan->description,
                 ];
@@ -134,7 +128,6 @@ new class extends Component {
             ))
             ->sortKeys();
 
-        // Número de meses a considerar para média (ano atual = meses passados, outros anos = 12)
         $mesesParaMedia = $ano === now()->year ? now()->month : 12;
 
         return [
@@ -163,15 +156,9 @@ new class extends Component {
 
             {{-- Navegação de ano --}}
             <div class="flex items-center gap-1">
-                <flux:button wire:click="anoAnterior" variant="ghost" size="sm" icon="chevron-left"/>
+                <flux:button wire:click="alterarAno('anterior')" wire:loading.attr="disabled" variant="ghost" size="sm" icon="chevron-left" />
                 <span class="text-sm font-semibold tabular-nums w-12 text-center">{{ $ano }}</span>
-                <flux:button
-                    wire:click="anoSeguinte"
-                    variant="ghost"
-                    size="sm"
-                    icon="chevron-right"
-                    :disabled="$ano >= now()->year"
-                />
+                <flux:button wire:click="alterarAno('seguinte')" wire:loading.attr="disabled" variant="ghost" size="sm" icon="chevron-right" :disabled="$ano >= now()->year" />
             </div>
         </div>
 

@@ -1,12 +1,12 @@
 <?php
 
+use App\Models\MaintenancePart;
 use Livewire\Component;
 use App\Models\Maintenance;
 use App\Models\Part;
 use Illuminate\Support\Facades\DB;
 
-new class extends Component
-{
+new class extends Component {
     public ?Maintenance $manutencao = null;
 
 
@@ -14,9 +14,9 @@ new class extends Component
 
     public function selectPeca(int $index, int $id, string $label): void
     {
-        $this->maintenance_parts[$index]['part_id'] = (string) $id;
-        $this->maintenance_parts[$index]['search']  = $label;
-        $this->maintenance_parts[$index]['open']    = false;
+        $this->maintenance_parts[$index]['part_id'] = (string)$id;
+        $this->maintenance_parts[$index]['search'] = $label;
+        $this->maintenance_parts[$index]['open'] = false;
     }
 
     public function mount(?Maintenance $manutencao = null): void
@@ -27,10 +27,10 @@ new class extends Component
                 ->select('parts.id as part_id', 'parts.name', 'parts.reference', 'maintenance_parts.quantity')
                 ->get()
                 ->map(fn($part) => [
-                    'part_id'  => (string) $part->part_id,
-                    'quantity' => (int) $part->quantity,
-                    'search'   => $part->name . ' / ' . $part->reference,
-                    'open'     => false, // estava a faltar esta linha
+                    'part_id' => (string)$part->part_id,
+                    'quantity' => (int)$part->quantity,
+                    'search' => $part->name . ' / ' . $part->reference,
+                    'open' => false, // estava a faltar esta linha
                 ])
                 ->toArray();
         } else {
@@ -41,10 +41,10 @@ new class extends Component
     public function addPart(): void
     {
         $this->maintenance_parts[] = [
-            'part_id'  => '',
+            'part_id' => '',
             'quantity' => 1,
-            'search'   => '',
-            'open'     => false,
+            'search' => '',
+            'open' => false,
         ];
     }
 
@@ -56,23 +56,19 @@ new class extends Component
 
     public function save(): void
     {
-        $this->validate([
-            'maintenance_parts'            => ['nullable', 'array'],
-            'maintenance_parts.*.part_id'  => ['required', 'exists:parts,id'],
-            'maintenance_parts.*.quantity' => ['required', 'integer', 'min:1'],
-        ]);
+        $this->validate(MaintenancePart::rules());
 
         DB::transaction(function () {
             $syncData = [];
 
-            $partIds   = collect($this->maintenance_parts)->pluck('part_id')->filter()->toArray();
+            $partIds = collect($this->maintenance_parts)->pluck('part_id')->filter()->toArray();
             $partCosts = Part::whereIn('id', $partIds)->pluck('current_unit_cost', 'id');
 
             foreach ($this->maintenance_parts as $item) {
                 if (empty($item['part_id'])) continue;
 
                 $syncData[$item['part_id']] = [
-                    'quantity'          => $item['quantity'],
+                    'quantity' => $item['quantity'],
                     'unit_cost_at_time' => $partCosts[$item['part_id']] ?? 0.00,
                 ];
             }
@@ -121,7 +117,7 @@ new class extends Component
             </flux:text>
         </div>
 
-        <flux:separator variant="subtle" />
+        <flux:separator variant="subtle"/>
 
         <div class="space-y-4">
 

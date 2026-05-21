@@ -2,6 +2,7 @@
 
 use App\Models\MaintenancePlan;
 use App\Models\Part;
+use App\Models\PlanPart;
 use Livewire\Component;
 
 new class extends Component {
@@ -12,9 +13,9 @@ new class extends Component {
 
     public function selectPeca(int $index, int $id, string $label): void
     {
-        $this->plan_parts[$index]['part_id'] = (string) $id;
-        $this->plan_parts[$index]['search']  = $label;
-        $this->plan_parts[$index]['open']    = false;
+        $this->plan_parts[$index]['part_id'] = (string)$id;
+        $this->plan_parts[$index]['search'] = $label;
+        $this->plan_parts[$index]['open'] = false;
     }
 
     public function mount(?MaintenancePlan $plano = null): void
@@ -27,10 +28,10 @@ new class extends Component {
                 ->join('parts', 'parts.id', '=', 'plan_parts.part_id')
                 ->get()
                 ->map(fn($p) => [
-                    'part_id'  => (string) $p->part_id,
-                    'quantity' => (int) $p->quantity,
-                    'search'   => $p->name . ' / ' . $p->reference,
-                    'open'     => false,
+                    'part_id' => (string)$p->part_id,
+                    'quantity' => (int)$p->quantity,
+                    'search' => $p->name . ' / ' . $p->reference,
+                    'open' => false,
                 ])
                 ->toArray();
         } else {
@@ -41,10 +42,10 @@ new class extends Component {
     public function addPart(): void
     {
         $this->plan_parts[] = [
-            'part_id'  => '',
+            'part_id' => '',
             'quantity' => 1,
-            'search'   => '',
-            'open'     => false,
+            'search' => '',
+            'open' => false,
         ];
     }
 
@@ -56,11 +57,7 @@ new class extends Component {
 
     public function save(): void
     {
-        $this->validate([
-            'plan_parts'            => ['nullable', 'array'],
-            'plan_parts.*.part_id'  => ['required', 'exists:parts,id'],
-            'plan_parts.*.quantity' => ['required', 'integer', 'min:1'],
-        ]);
+        $this->validate(PlanPart::rules());
 
         \DB::transaction(function () {
             $syncData = [];
@@ -120,7 +117,7 @@ new class extends Component {
             </flux:text>
         </div>
 
-        <flux:separator variant="subtle" />
+        <flux:separator variant="subtle"/>
 
         <div class="space-y-4">
 
@@ -130,70 +127,71 @@ new class extends Component {
                 </div>
             @endif
 
-                <div class="space-y-3">
-                    @foreach($plan_parts as $index => $item)
-                        <div class="flex items-start gap-3" wire:key="plan-part-row-{{ $index }}-{{ $item['part_id'] ?? 'new' }}">
+            <div class="space-y-3">
+                @foreach($plan_parts as $index => $item)
+                    <div class="flex items-start gap-3"
+                         wire:key="plan-part-row-{{ $index }}-{{ $item['part_id'] ?? 'new' }}">
 
-                            <div class="flex-1">
-                                <flux:input
-                                    label="{{ $index === 0 ? 'Peça' : '' }}"
-                                    wire:model.live.debounce.300ms="plan_parts.{{ $index }}.search"
-                                    wire:focus="$set('plan_parts.{{ $index }}.open', true)"
-                                    @keydown.escape="$wire.set('plan_parts.{{ $index }}.open', false)"
-                                    placeholder="Pesquisar peça..."
-                                    autocomplete="off"
-                                    icon="magnifying-glass"
-                                />
+                        <div class="flex-1">
+                            <flux:input
+                                label="{{ $index === 0 ? 'Peça' : '' }}"
+                                wire:model.live.debounce.300ms="plan_parts.{{ $index }}.search"
+                                wire:focus="$set('plan_parts.{{ $index }}.open', true)"
+                                @keydown.escape="$wire.set('plan_parts.{{ $index }}.open', false)"
+                                placeholder="Pesquisar peça..."
+                                autocomplete="off"
+                                icon="magnifying-glass"
+                            />
 
-                                <div class="relative">
-                                    @if($item['open'] && isset($pecas[$index]))
-                                        <ul class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg">
-                                            @forelse($pecas[$index] as $peca)
-                                                <li
-                                                    wire:click="selectPeca({{ $index }}, {{ $peca->id }}, '{{ addslashes($peca->name . ' / ' . $peca->reference) }}')"
-                                                    class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex justify-between gap-2"
-                                                >
-                                                    <span>{{ $peca->name }}</span>
-                                                    <span class="text-zinc-400 text-xs">{{ $peca->reference }}</span>
-                                                </li>
-                                            @empty
-                                                <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">
-                                                    Nenhuma peça encontrada
-                                                </li>
-                                            @endforelse
-                                        </ul>
-                                    @endif
-                                </div>
-
-                                @error("plan_parts.$index.part_id")
-                                <flux:error>{{ $message }}</flux:error>
-                                @enderror
+                            <div class="relative">
+                                @if($item['open'] && isset($pecas[$index]))
+                                    <ul class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg">
+                                        @forelse($pecas[$index] as $peca)
+                                            <li
+                                                wire:click="selectPeca({{ $index }}, {{ $peca->id }}, '{{ addslashes($peca->name . ' / ' . $peca->reference) }}')"
+                                                class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex justify-between gap-2"
+                                            >
+                                                <span>{{ $peca->name }}</span>
+                                                <span class="text-zinc-400 text-xs">{{ $peca->reference }}</span>
+                                            </li>
+                                        @empty
+                                            <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">
+                                                Nenhuma peça encontrada
+                                            </li>
+                                        @endforelse
+                                    </ul>
+                                @endif
                             </div>
 
-                            <div class="w-32 shrink-0">
-                                <flux:input
-                                    label="{{ $index === 0 ? 'Qtd.' : '' }}"
-                                    type="number"
-                                    min="1"
-                                    wire:model="plan_parts.{{ $index }}.quantity"
-                                />
-                                @error("plan_parts.$index.quantity")
-                                <flux:error>{{ $message }}</flux:error>
-                                @enderror
-                            </div>
-
-                            <div class="shrink-0 {{ $index === 0 ? 'mt-6' : '' }}">
-                                <flux:button
-                                    type="button"
-                                    variant="danger"
-                                    icon="trash"
-                                    wire:click="removePart({{ $index }})"
-                                />
-                            </div>
-
+                            @error("plan_parts.$index.part_id")
+                            <flux:error>{{ $message }}</flux:error>
+                            @enderror
                         </div>
-                    @endforeach
-                </div>
+
+                        <div class="w-32 shrink-0">
+                            <flux:input
+                                label="{{ $index === 0 ? 'Qtd.' : '' }}"
+                                type="number"
+                                min="1"
+                                wire:model="plan_parts.{{ $index }}.quantity"
+                            />
+                            @error("plan_parts.$index.quantity")
+                            <flux:error>{{ $message }}</flux:error>
+                            @enderror
+                        </div>
+
+                        <div class="shrink-0 {{ $index === 0 ? 'mt-6' : '' }}">
+                            <flux:button
+                                type="button"
+                                variant="danger"
+                                icon="trash"
+                                wire:click="removePart({{ $index }})"
+                            />
+                        </div>
+
+                    </div>
+                @endforeach
+            </div>
 
             <flux:button type="button" size="sm" icon="plus" wire:click="addPart">
                 Adicionar Peça

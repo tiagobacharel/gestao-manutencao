@@ -22,6 +22,7 @@ new class extends Component {
     public string $resourceSearch = '';
     public string $planSearch = '';
 
+
     public function rendering($view)
     {
         $view->layoutData(['title' => 'Manutenções']);
@@ -63,7 +64,6 @@ new class extends Component {
         }
     }
 
-    #[Computed]
     public function searchedResources()
     {
         return Resource::whereHas('maintenances')
@@ -73,7 +73,6 @@ new class extends Component {
             ->toArray();
     }
 
-    #[Computed]
     public function searchedPlans()
     {
         return MaintenancePlan::whereHas('maintenances')
@@ -93,7 +92,7 @@ new class extends Component {
                     'searchModel' => 'resourceSearch',
                     'label' => 'Todos os recursos',
                     'selectMethod' => 'selectResource',
-                    'computedOptions' => $this->searchedResources,
+                    'computedOptions' => $this->searchedResources(),
                 ],
                 [
                     'type' => 'custom-dropdown',
@@ -101,7 +100,7 @@ new class extends Component {
                     'searchModel' => 'planSearch',
                     'label' => 'Todos os planos',
                     'selectMethod' => 'selectPlan',
-                    'computedOptions' => $this->searchedPlans,
+                    'computedOptions' => $this->searchedPlans(),
                 ],
                 [
                     'type' => 'select',

@@ -52,7 +52,6 @@ new class extends Component {
                 ],
             ],
 
-            // Mapeamento dos valores atuais
             'valoresAtuais' => [
                 'search' => $this->search,
                 'status' => $this->status,

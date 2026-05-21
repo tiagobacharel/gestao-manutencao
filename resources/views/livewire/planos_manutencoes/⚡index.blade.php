@@ -35,7 +35,13 @@ new class extends Component {
         }
     }
 
-    // ADICIONADO: Método necessário para quando o utilizador clica numa opção da lista
+    public bool $showModal = false;
+
+    public function openModal(): void
+    {
+        $this->showModal = true;
+    }
+
     public function selectResource($id, $name): void
     {
         $this->resource_id = $id;
@@ -52,14 +58,6 @@ new class extends Component {
         }
     }
 
-    public bool $showModal = false;
-
-    public function openModal(): void
-    {
-        $this->showModal = true;
-    }
-
-    #[Computed]
     public function searchedResources()
     {
         // Alterado para procurar em planos (maintenancePlans) já que estamos na página de planos
@@ -85,7 +83,6 @@ new class extends Component {
                     'searchModel' => 'resourceSearch',
                     'label' => 'Todos os recursos',
                     'selectMethod' => 'selectResource',
-                    // CORRIGIDO: Chamada explícita como método () evita a exceção do Volt
                     'computedOptions' => $this->searchedResources(),
                 ],
                 [
