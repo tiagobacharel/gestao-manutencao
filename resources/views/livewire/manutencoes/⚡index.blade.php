@@ -13,14 +13,12 @@ new class extends Component {
 
     public string $search = '';
     public string $status = '';
-    public string $sortBy = 'scheduled_at';
+    public string $sortBy = 'created_at';
     public string $sortDir = 'desc';
 
-    // IDs reais usados quando o utilizador clica numa opção
     public $resource_id = '';
     public $plan_id = '';
 
-    // Texto digitado em tempo real nos inputs
     public string $resourceSearch = '';
     public string $planSearch = '';
 
@@ -29,14 +27,11 @@ new class extends Component {
         $view->layoutData(['title' => 'Manutenções']);
     }
 
-    // Se qualquer campo de texto ou ID mudar, faz reset à paginação
     public function updated($propertyName): void
     {
         if (in_array($propertyName, ['search', 'status', 'resource_id', 'plan_id', 'resourceSearch', 'planSearch'])) {
             $this->resetPage();
 
-            // Se o utilizador começou a digitar de novo após ter escolhido algo,
-            // limpamos o ID antigo para o filtro passar a basear-se no texto escrito
             if ($propertyName === 'resourceSearch' && $this->resource_id) {
                 $this->resource_id = '';
             }
@@ -137,18 +132,16 @@ new class extends Component {
                 ))
                 ->when($this->status, fn($q) => $q->where('status', $this->status))
 
-                // SOLUÇÃO: Filtra por ID se já escolheu, ou por texto se estiver apenas a escrever
                 ->when($this->resource_id, fn($q) => $q->where('resource_id', $this->resource_id))
                 ->when(!$this->resource_id && $this->resourceSearch, fn($q) => $q->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->resourceSearch}%")))
 
-                // SOLUÇÃO: Filtra por ID se já escolheu, ou por texto se estiver apenas a escrever
                 ->when($this->plan_id, fn($q) => $q->where('maintenance_plan_id', $this->plan_id))
                 ->when(!$this->plan_id && $this->planSearch, fn($q) => $q->whereHas('plan', fn($p) => $p->where('name', 'like', "%{$this->planSearch}%")))
 
                 ->when(
                     $this->sortBy === 'cost',
                     fn($q) => $q->orderBy(
-                        MaintenancePart::selectRaw('COALESCE(SUM(quantity * unit_cost), 0)')
+                        MaintenancePart::selectRaw('COALESCE(SUM(quantity * unit_cost_at_time), 0)')
                             ->whereColumn('maintenance_id', 'maintenances.id'),
                         $this->sortDir
                     ),

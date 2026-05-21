@@ -124,7 +124,6 @@ new class extends Component {
                                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                                 @foreach($manutencao->parts as $part)
                                     <tr>
-                                        <!-- Dados Master (Lidos do Catálogo de Peças) -->
                                         <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
                                             {{ $part->reference ?? '—' }}
                                         </td>
@@ -133,7 +132,6 @@ new class extends Component {
                                                 {{ $part->name }}
                                             </a>
                                         </td>
-                                        <!-- Dados Transacionais (Lidos da tabela Pivot) -->
                                         <td class="py-2 pr-4 text-right">{{ $part->pivot->quantity }}</td>
                                         <td class="py-2 pr-4 text-right text-zinc-500">
                                             {{ number_format($part->pivot->unit_cost_at_time, 2, ',', '.') }} €
@@ -202,30 +200,25 @@ new class extends Component {
                                 <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
                                 @foreach($manutencao->plan->planParts as $planPart)
                                     <tr>
-                                        <!-- 1. Referência com navegação segura -->
                                         <td class="py-2 pr-4 text-zinc-400 font-mono text-xs">
                                             {{ $planPart->part?->reference ?? '—' }}
                                         </td>
 
-                                        <!-- 2. Nome/Descrição com navegação segura -->
 
                                         <td class="py-2 pr-4 font-medium">
-                                            <a href="{{ route('pecas.show', $part) }}" wire:navigate class="hover:underline text-zinc-800 dark:text-white">
+                                            <a href="{{ route('pecas.show', $planPart->part) }}" wire:navigate class="hover:underline text-zinc-800 dark:text-white">
                                                 {{ $planPart->part?->name ?? 'Peça Não Encontrada ou Apagada' }}
                                             </a>
                                         </td>
 
-                                        <!-- 3. Quantidade do Plano -->
                                         <td class="py-2 pr-4 text-right">
                                             {{ $planPart->quantity }}
                                         </td>
 
-                                        <!-- 4. Preço Unitário Seguro (Linha 223 corrigida) -->
                                         <td class="py-2 pr-4 text-right text-zinc-500">
                                             {{ number_format($planPart->part?->current_unit_cost ?? 0, 2, ',', '.') }} €
                                         </td>
 
-                                        <!-- 5. Total por Linha Seguro -->
                                         <td class="py-2 text-right font-semibold">
                                             {{ number_format($planPart->quantity * ($planPart->part?->current_unit_cost ?? 0), 2, ',', '.') }} €
                                         </td>
@@ -235,7 +228,7 @@ new class extends Component {
                                 <tfoot>
                                 <tr class="border-t-2 border-zinc-300 dark:border-zinc-600">
                                     <td colspan="4" class="pt-3 text-right font-semibold text-sm text-zinc-500">Total previsto</td>
-                                    <!-- 6. Total Geral do Rodapé Seguro -->
+
                                     <td class="pt-3 text-right font-bold text-base">
                                         {{ number_format($manutencao->plan->estimated_cost, 2, ',', '.') }}&nbsp;€
                                     </td>

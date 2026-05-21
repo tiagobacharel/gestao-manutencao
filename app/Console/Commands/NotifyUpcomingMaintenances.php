@@ -31,7 +31,6 @@ class NotifyUpcomingMaintenances extends Command
             })
             ->get();
 
-        // Filter plans where the notification day for the next occurrence is today
         $due = $plans->filter(function (MaintenancePlan $plan) use ($today): bool {
             $nextOccurrence = $this->getNextOccurrence($plan, $today);
 
@@ -44,7 +43,6 @@ class NotifyUpcomingMaintenances extends Command
             return $notifyOn->isSameDay($today);
         });
 
-        // Attach the calculated next occurrence to each plan for display
         $due = $due->map(function (MaintenancePlan $plan) use ($today) {
             $plan->next_occurrence = $this->getNextOccurrence($plan, $today);
             return $plan;
@@ -91,13 +89,12 @@ class NotifyUpcomingMaintenances extends Command
     {
         $start = Carbon::parse($plan->started_at)->startOfDay();
 
-        // If start is in the future, that IS the first occurrence
         if ($start->greaterThan($today)) {
             return $start;
         }
 
         $intervalValue = $plan->interval_value;
-        $intervalUnit  = $plan->interval_unit; // day | month | year
+        $intervalUnit  = $plan->interval_unit;
 
         $diffMethod = match ($intervalUnit) {
             'day'   => 'diffInDays',

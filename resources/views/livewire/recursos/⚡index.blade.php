@@ -11,6 +11,8 @@ new class extends Component {
     public $status = '';
     public $location = '';
     public $section = '';
+    public string $sortBy = 'created_at';
+    public string $sortDir = 'desc';
 
     public function rendering($view)
     {

@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -35,11 +36,27 @@ class MaintenancePlansPublished extends Notification implements ShouldQueue
             );
 
         foreach ($this->maintenancePlans as $plan) {
-            $dueDate   = $plan->started_at->format('d/m/Y');
-            $daysUntil = now()->startOfDay()->diffInDays($plan->started_at->startOfDay());
-            $when      = $daysUntil === 0 ? 'hoje' : "em {$daysUntil} dia(s) ({$dueDate})";
 
-            // Transforma em array de strings (sem implodir)
+            $nextMaintenanceDate = Carbon::parse($plan->started_at)->startOfDay();
+            $today = now()->startOfDay();
+
+
+            while ($nextMaintenanceDate->isPast() && !$nextMaintenanceDate->isToday()) {
+                $nextMaintenanceDate->add($plan->interval_value, $plan->interval_unit);
+            }
+
+            $dueDate   = $nextMaintenanceDate->format('d/m/Y');
+            $daysUntil = $today->diffInDays($nextMaintenanceDate, false);
+
+            if ($daysUntil == 0) {
+                $when = 'hoje';
+            } elseif ($daysUntil == 1) {
+                $when = "amanhã ({$dueDate})";
+            } else {
+                $when = "em {$daysUntil} dias ({$dueDate})";
+            }
+
+
             $parts = $plan->planParts->map(function ($planPart) {
                 return "• {$planPart->part->name} (Ref: {$planPart->part->reference}) x{$planPart->quantity}";
             })->toArray();
@@ -53,15 +70,15 @@ class MaintenancePlansPublished extends Notification implements ShouldQueue
                 $mail->line("**Descrição:** {$plan->description}");
             }
 
-            // O Laravel Mail aceita um array e cria uma linha nova para cada item
-            $mail->line("**Itens:**")
+
+            $mail->line("**Peças:**")
                 ->lines($parts);
         }
 
 
         return $mail
             ->line("───────────────────────────────")
-            ->line('Por favor, certifique-se de que os recursos necessários estão disponíveis.')
+            ->line('Por favor, certifique-se de que as peças necessários estão disponíveis.')
             ->salutation('Com os melhores cumprimentos');
     }
 

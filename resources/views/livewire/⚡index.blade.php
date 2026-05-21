@@ -1,12 +1,12 @@
 <?php
 
+use Carbon\Carbon;
 use Livewire\Component;
 use App\Models\Maintenance;
 use App\Models\MaintenancePlan;
 use Illuminate\Support\Facades\DB;
 
-new class extends Component
-{
+new class extends Component {
     public int $ano;
 
     public function mount(): void
@@ -58,12 +58,50 @@ new class extends Component
 
         $emProgresso = Maintenance::where('status', 'in_progress')->count();
 
-        $proximasManutencoes = Maintenance::with(['resource', 'plan'])
+        // 1. Manutenções já agendadas (como antes)
+        $manutencoes = Maintenance::with(['resource', 'plan'])
             ->whereIn('status', ['pending', 'in_progress'])
             ->whereNotNull('scheduled_at')
             ->orderBy('scheduled_at')
-            ->limit(8)
+            ->limit(4)
             ->get();
+
+// 2. Planos ativos que NÃO têm manutenção pendente/em progresso associada
+        $planosSeemManutencaoPendente = MaintenancePlan::with('resource')
+            ->where('is_active', true)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('maintenances')
+                    ->whereColumn('maintenances.maintenance_plan_id', 'maintenance_plans.id')
+                    ->whereIn('maintenances.status', ['pending', 'in_progress']);
+            })
+            ->get()
+            ->map(function (MaintenancePlan $plan) {
+                // Calcula a próxima data com base no intervalo do plano
+                $proxima = $plan->started_at
+                    ? Carbon::parse($plan->started_at)
+                    : Carbon::now();
+
+                while ($proxima->isPast()) {
+                    $proxima->add($plan->interval_value, $plan->interval_unit);
+                }
+
+                // Simula um objeto Maintenance para uniformizar os dados
+                return (object)[
+                    'id' => null,
+                    'resource' => $plan->resource,
+                    'plan' => $plan,
+                    'status' => 'planned',      // status virtual
+                    'scheduled_at' => $proxima->toDateString(),
+                    'notes' => $plan->description,
+                ];
+            });
+
+        $proximasManutencoes = $manutencoes
+            ->concat($planosSeemManutencaoPendente)
+            ->sortBy('scheduled_at')
+            ->take(4)
+            ->values();
 
         $custoMensal = collect(range(1, 12))->mapWithKeys(function ($mes) use ($ano) {
             $manutencoes = Maintenance::where('status', 'done')
@@ -100,17 +138,17 @@ new class extends Component
         $mesesParaMedia = $ano === now()->year ? now()->month : 12;
 
         return [
-            'ano'                 => $ano,
-            'totalFeitas'         => $totalFeitas,
-            'totalFeitasAno'      => $totalFeitasAno,
-            'custoAnual'          => $custoAnual,
-            'custoTotal'          => $custoTotal,
-            'emProgresso'         => $emProgresso,
+            'ano' => $ano,
+            'totalFeitas' => $totalFeitas,
+            'totalFeitasAno' => $totalFeitasAno,
+            'custoAnual' => $custoAnual,
+            'custoTotal' => $custoTotal,
+            'emProgresso' => $emProgresso,
             'proximasManutencoes' => $proximasManutencoes,
-            'custoMensal'         => $custoMensal,
-            'recentes'            => $recentes,
-            'custoPorAno'         => $custoPorAno,
-            'mesesParaMedia'      => $mesesParaMedia,
+            'custoMensal' => $custoMensal,
+            'recentes' => $recentes,
+            'custoPorAno' => $custoPorAno,
+            'mesesParaMedia' => $mesesParaMedia,
         ];
     }
 };
@@ -125,7 +163,7 @@ new class extends Component
 
             {{-- Navegação de ano --}}
             <div class="flex items-center gap-1">
-                <flux:button wire:click="anoAnterior" variant="ghost" size="sm" icon="chevron-left" />
+                <flux:button wire:click="anoAnterior" variant="ghost" size="sm" icon="chevron-left"/>
                 <span class="text-sm font-semibold tabular-nums w-12 text-center">{{ $ano }}</span>
                 <flux:button
                     wire:click="anoSeguinte"
@@ -137,7 +175,7 @@ new class extends Component
             </div>
         </div>
 
-        <flux:separator variant="subtle" />
+        <flux:separator variant="subtle"/>
 
         {{-- KPI Cards --}}
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -157,7 +195,8 @@ new class extends Component
                     <span class="text-3xl font-bold">{{ number_format($custoAnual, 0, ',', '.') }}</span>
                     <span class="text-zinc-400 mb-1 text-sm">€</span>
                 </div>
-                <flux:text size="xs" class="text-zinc-400">{{ number_format($custoTotal, 0, ',', '.') }} € acumulado</flux:text>
+                <flux:text size="xs" class="text-zinc-400">{{ number_format($custoTotal, 0, ',', '.') }} € acumulado
+                </flux:text>
             </flux:card>
 
             <flux:card class="space-y-1">
@@ -248,7 +287,8 @@ new class extends Component
                                             class="absolute bottom-full mb-2 z-20 bg-zinc-900 dark:bg-zinc-700 text-white text-[10px] font-medium rounded px-2 py-1 whitespace-nowrap pointer-events-none shadow-lg"
                                         >
                                             {{ number_format($custo, 2, ',', '.') }} €
-                                            <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900 dark:border-t-zinc-700"></div>
+                                            <div
+                                                class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-900 dark:border-t-zinc-700"></div>
                                         </div>
                                     @endif
 
@@ -278,7 +318,7 @@ new class extends Component
                     </div>
                 </div>
 
-                <flux:separator class="mt-4 mb-3" />
+                <flux:separator class="mt-4 mb-3"/>
                 <div class="flex items-center gap-4 text-xs text-zinc-400">
                     @if($ano === now()->year)
                         <div class="flex items-center gap-1.5">
@@ -303,27 +343,40 @@ new class extends Component
                     <div class="space-y-3">
                         @foreach($proximasManutencoes->take(4) as $m)
                             @php
-                                $dias = now()->startOfDay()->diffInDays($m->scheduled_at, false);
+                                $scheduledAt = $m->scheduled_at instanceof \Carbon\Carbon
+                                    ? $m->scheduled_at
+                                    : \Carbon\Carbon::parse($m->scheduled_at);
+
+                                $dias = now()->startOfDay()->diffInDays($scheduledAt, false);
                                 $cor = match(true) {
-                                    $dias < 0   => 'red',
-                                    $dias <= 3  => 'yellow',
-                                    $dias <= 7  => 'blue',
-                                    default     => 'zinc',
+                                    $dias < 0  => 'red',
+                                    $dias <= 3 => 'yellow',
+                                    $dias <= 7 => 'blue',
+                                    default    => 'zinc',
                                 };
                                 $label = match(true) {
-                                    $dias < 0   => 'Atrasada',
+                                    $dias < 0  => 'Atrasada',
                                     $dias === 0 => 'Hoje',
                                     $dias === 1 => 'Amanhã',
-                                    default     => 'em ' . $dias . 'd',
+                                    default    => 'em ' . $dias . 'd',
                                 };
+
+                                $url = $m->id
+                                    ? route('manutencoes.show', $m->id)
+                                    : route('planos_manutencoes.show', $m->plan->id);
                             @endphp
-                            <a href="{{ route('manutencoes.show', $m) }}" wire:navigate
+                            <a href="{{ $url }}" wire:navigate
                                class="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium truncate">{{ $m->resource->name }}</p>
                                     <p class="text-xs text-zinc-400 truncate">
-                                        {{ $m->scheduled_at->format('d/m/Y') }}
-                                        @if($m->plan) · {{ $m->plan->name }} @endif
+                                        {{ $scheduledAt->format('d/m/Y') }}
+                                        @if($m->plan)
+                                            · {{ $m->plan->name }}
+                                        @endif
+                                        @if(($m->status ?? null) === 'planned')
+                                            · <span class="italic">Plano</span>
+                                        @endif
                                     </p>
                                 </div>
                                 <flux:badge color="{{ $cor }}" size="sm" class="shrink-0">{{ $label }}</flux:badge>
@@ -363,7 +416,7 @@ new class extends Component
                                 <td class="py-2 pr-4">
                                     @if($m->plan)
                                         <a href="{{ route('planos_manutencoes.show', $m->plan) }}" wire:navigate>
-                                            <flux:badge   color="purple" size="sm">{{ $m->plan->name }}</flux:badge>
+                                            <flux:badge color="purple" size="sm">{{ $m->plan->name }}</flux:badge>
                                         </a>
                                     @else
                                         <span class="text-zinc-400">—</span>
@@ -373,7 +426,8 @@ new class extends Component
                                     {{ $m->done_at?->format('d/m/Y H:i') ?? '—' }}
                                 </td>
                                 <td class="py-2 text-right font-semibold">
-                                    {{ number_format($m->parts->sum(fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time), 2, ',', '.') }} €
+                                    {{ number_format($m->parts->sum(fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time), 2, ',', '.') }}
+                                    €
                                 </td>
                             </tr>
                         @endforeach

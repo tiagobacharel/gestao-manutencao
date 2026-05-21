@@ -12,8 +12,8 @@ new class extends Component {
     public string $search = '';
     public string $status = '';
     public $resource_id = '';
-    public string $sortBy = 'name';
-    public string $sortDir = 'asc';
+    public string $sortBy = 'created_at';
+    public string $sortDir = 'desc';
 
     public string $resourceSearch = '';
 
@@ -113,12 +113,22 @@ new class extends Component {
                         ->orWhere('description', 'like', "%{$this->search}%")
                         ->orWhereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->search}%"));
                 }))
-                // CORRIGIDO: Filtra por ID se já clicou, ou pelo texto em tempo real se estiver apenas a escrever
                 ->when($this->resource_id, fn($q) => $q->where('resource_id', $this->resource_id))
                 ->when(!$this->resource_id && $this->resourceSearch, fn($q) => $q->whereHas('resource', fn($r) => $r->where('name', 'like', "%{$this->resourceSearch}%")))
 
                 ->when($this->status !== '', fn($q) => $q->where('is_active', (bool) $this->status))
-                ->orderBy($this->sortBy, $this->sortDir)
+                // No with(), substitui o orderBy simples por:
+                ->when(
+                    $this->sortBy === 'interval_value',
+                    fn($q) => $q->orderByRaw("
+                        CASE interval_unit
+                            WHEN 'day'   THEN interval_value
+                            WHEN 'month' THEN interval_value * 30
+                            WHEN 'year'  THEN interval_value * 365
+                        END {$this->sortDir}
+                    "),
+                    fn($q) => $q->orderBy($this->sortBy, $this->sortDir)
+                )
                 ->paginate(13),
         ];
     }
@@ -155,9 +165,9 @@ new class extends Component {
                     <flux:table.column>Recurso</flux:table.column>
                     <flux:table.column
                         sortable
-                        :sorted="$sortBy === 'interval_days'"
+                        :sorted="$sortBy === 'interval_value'"
                         :direction="$sortDir"
-                        wire:click="sort('interval_days')"
+                        wire:click="sort('interval_value')"
                     >Intervalo</flux:table.column>
                     <flux:table.column>Peças previstas</flux:table.column>
                     <flux:table.column
