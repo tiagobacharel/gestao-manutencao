@@ -26,124 +26,134 @@ new class extends Component {
 
     public function rendering($view): void
     {
-        $view->layoutData(['title' => 'Dashboard']);
+        $view->layoutData(['title' => 'Página Principal']);
     }
 
     public function with(): array
     {
-        $ano = $this->ano;
+        return once(function () {
+            $ano = $this->ano;
 
-        $totalFeitas = Maintenance::where('status', 'done')->count();
+            // --- CONTAGENS ---
+            $statusCounts = Maintenance::selectRaw("status, count(*) as total")
+                ->whereIn('status', ['done', 'in_progress'])
+                ->groupBy('status')
+                ->pluck('total', 'status');
 
-        $totalFeitasAno = Maintenance::where('status', 'done')
-            ->whereYear('done_at', $ano)
-            ->count();
+            $totalFeitas = $statusCounts->get('done', 0);
+            $emProgresso = $statusCounts->get('in_progress', 0);
 
-        $custoAnual = Maintenance::where('status', 'done')
-            ->whereYear('done_at', $ano)
-            ->with('parts')
-            ->get()
-            ->sum(fn($m) => $m->parts->sum(
-                fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time
-            ));
-
-        $custoTotal = Maintenance::where('status', 'done')
-            ->with('parts')
-            ->get()
-            ->sum(fn($m) => $m->parts->sum(
-                fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time
-            ));
-
-        $emProgresso = Maintenance::where('status', 'in_progress')->count();
-
-        $manutencoes = Maintenance::with(['resource', 'plan'])
-            ->whereIn('status', ['pending', 'in_progress'])
-            ->whereNotNull('scheduled_at')
-            ->orderBy('scheduled_at')
-            ->limit(4)
-            ->get();
-
-        $planosSeemManutencaoPendente = MaintenancePlan::with('resource')
-            ->where('is_active', true)
-            ->whereNotExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('maintenances')
-                    ->whereColumn('maintenances.maintenance_plan_id', 'maintenance_plans.id')
-                    ->whereIn('maintenances.status', ['pending', 'in_progress']);
-            })
-            ->get()
-            ->map(function (MaintenancePlan $plan) {
-                $proxima = $plan->started_at
-                    ? Carbon::parse($plan->started_at)
-                    : Carbon::now();
-
-                while ($proxima->isPast()) {
-                    $proxima->add($plan->interval_value, $plan->interval_unit);
-                }
-
-                return (object)[
-                    'id' => null,
-                    'resource' => $plan->resource,
-                    'plan' => $plan,
-                    'status' => 'planned',
-                    'scheduled_at' => $proxima->toDateString(),
-                    'notes' => $plan->description,
-                ];
-            });
-
-        $proximasManutencoes = $manutencoes
-            ->concat($planosSeemManutencaoPendente)
-            ->sortBy('scheduled_at')
-            ->take(4)
-            ->values();
-
-        $custoMensal = collect(range(1, 12))->mapWithKeys(function ($mes) use ($ano) {
-            $manutencoes = Maintenance::where('status', 'done')
-                ->whereYear('done_at', $ano)
-                ->whereMonth('done_at', $mes)
-                ->with('parts')
+            // --- CUSTO ANUAL E MENSAL: puro SQL, zero Parts em memória ---
+            $custosAno = DB::table('maintenances')
+                ->join('maintenance_parts', 'maintenances.id', '=', 'maintenance_parts.maintenance_id')
+                ->where('maintenances.status', 'done')
+                ->whereRaw("strftime('%Y', maintenances.done_at) = cast(? as text)", [$ano])
+                ->selectRaw('
+                maintenances.id,
+                maintenances.done_at,
+                maintenances.resource_id,
+                maintenances.maintenance_plan_id,
+                SUM(maintenance_parts.quantity * maintenance_parts.unit_cost_at_time) as custo
+            ')
+                ->groupBy('maintenances.id', 'maintenances.done_at', 'maintenances.resource_id', 'maintenances.maintenance_plan_id')
                 ->get();
 
-            $custo = $manutencoes->sum(fn($m) => $m->parts->sum(
-                fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time
-            ));
+            $totalFeitasAno = $custosAno->count();
+            $custoAnual = $custosAno->sum('custo');
 
-            return [$mes => round($custo, 2)];
+            $custoMensal = collect(range(1, 12))->mapWithKeys(function ($mes) use ($custosAno) {
+                $custo = $custosAno
+                    ->filter(fn($m) => Carbon::parse($m->done_at)->month === $mes)
+                    ->sum('custo');
+                return [$mes => round($custo, 2)];
+            });
+
+            // --- CUSTO TOTAL ACUMULADO ---
+            $custoTotal = DB::table('maintenance_parts')
+                ->sum(DB::raw('quantity * unit_cost_at_time'));
+
+            // --- CUSTO POR ANO ---
+            $custoPorAno = DB::table('maintenances')
+                ->join('maintenance_parts', 'maintenances.id', '=', 'maintenance_parts.maintenance_id')
+                ->where('maintenances.status', 'done')
+                ->whereNotNull('maintenances.done_at')
+                ->selectRaw("strftime('%Y', maintenances.done_at) as ano_grupo, SUM(maintenance_parts.quantity * maintenance_parts.unit_cost_at_time) as total")
+                ->groupBy('ano_grupo')
+                ->get()
+                ->pluck('total', 'ano_grupo')
+                ->sortKeys();
+
+            // --- RECENTES: só 5, com resource e plan ---
+            $recentes = Maintenance::with(['resource', 'plan'])
+                ->where('status', 'done')
+                ->whereRaw("strftime('%Y', done_at) = cast(? as text)", [$ano])
+                ->orderByDesc('done_at')
+                ->limit(5)
+                ->get()
+                ->map(function ($m) use ($custosAno) {
+                    $m->custo = $custosAno->firstWhere('id', $m->id)?->custo ?? 0;
+                    return $m;
+                });
+
+            // --- PRÓXIMAS: só 4 manutenções reais ---
+            $manutencoes = Maintenance::with(['resource', 'plan'])
+                ->whereIn('status', ['pending', 'in_progress'])
+                ->whereNotNull('scheduled_at')
+                ->orderBy('scheduled_at')
+                ->limit(4)
+                ->get();
+
+            // --- PLANOS SEM MANUTENÇÃO PENDENTE: limit na query, não em PHP ---
+            $planosVirtuais = MaintenancePlan::with('resource')
+                ->where('is_active', true)
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('maintenances')
+                        ->whereColumn('maintenances.maintenance_plan_id', 'maintenance_plans.id')
+                        ->whereIn('maintenances.status', ['pending', 'in_progress']);
+                })
+                ->limit(4) // <-- limit aqui, não depois de ->get()
+                ->get()
+                ->map(function (MaintenancePlan $plan) {
+                    $proxima = $plan->started_at ? Carbon::parse($plan->started_at) : Carbon::now();
+                    while ($proxima->isPast()) {
+                        $proxima->add($plan->interval_value, $plan->interval_unit);
+                    }
+                    return (object)[
+                        'id'                  => null,
+                        'resource'            => $plan->resource,
+                        'plan'                => $plan,
+                        'status'              => 'planned',
+                        'scheduled_at'        => $proxima->toDateString(),
+                        'notes'               => $plan->description,
+                        'done_at'             => null,
+                    ];
+                });
+
+            $proximasManutencoes = $manutencoes
+                ->concat($planosVirtuais)
+                ->sortBy('scheduled_at')
+                ->take(4)
+                ->values();
+
+            $mesesParaMedia = $ano === now()->year ? now()->month : 12;
+
+            return [
+                'ano'                 => $ano,
+                'totalFeitas'         => $totalFeitas,
+                'totalFeitasAno'      => $totalFeitasAno,
+                'custoAnual'          => $custoAnual,
+                'custoTotal'          => $custoTotal,
+                'emProgresso'         => $emProgresso,
+                'proximasManutencoes' => $proximasManutencoes,
+                'custoMensal'         => $custoMensal,
+                'recentes'            => $recentes,
+                'custoPorAno'         => $custoPorAno,
+                'mesesParaMedia'      => $mesesParaMedia,
+            ];
         });
-
-        $recentes = Maintenance::with(['resource', 'plan'])
-            ->where('status', 'done')
-            ->whereYear('done_at', $ano)
-            ->orderByDesc('done_at')
-            ->limit(5)
-            ->get();
-
-        $custoPorAno = Maintenance::where('status', 'done')
-            ->whereNotNull('done_at')
-            ->with('parts')
-            ->get()
-            ->groupBy(fn($m) => $m->done_at->year)
-            ->map(fn($manutencoes) => $manutencoes->sum(
-                fn($m) => $m->parts->sum(fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time)
-            ))
-            ->sortKeys();
-
-        $mesesParaMedia = $ano === now()->year ? now()->month : 12;
-
-        return [
-            'ano' => $ano,
-            'totalFeitas' => $totalFeitas,
-            'totalFeitasAno' => $totalFeitasAno,
-            'custoAnual' => $custoAnual,
-            'custoTotal' => $custoTotal,
-            'emProgresso' => $emProgresso,
-            'proximasManutencoes' => $proximasManutencoes,
-            'custoMensal' => $custoMensal,
-            'recentes' => $recentes,
-            'custoPorAno' => $custoPorAno,
-            'mesesParaMedia' => $mesesParaMedia,
-        ];
     }
+
 };
 ?>
 
@@ -413,8 +423,7 @@ new class extends Component {
                                     {{ $m->done_at?->format('d/m/Y H:i') ?? '—' }}
                                 </td>
                                 <td class="py-2 text-right font-semibold">
-                                    {{ number_format($m->parts->sum(fn($p) => $p->pivot->quantity * $p->pivot->unit_cost_at_time), 2, ',', '.') }}
-                                    €
+                                    {{ number_format($m->custo, 2, ',', '.') }} €
                                 </td>
                             </tr>
                         @endforeach

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('maintenance_id')->constrained()->cascadeOnDelete();
             $table->foreignId('part_id')->constrained('parts')->restrictOnDelete();
+            $table->foreignId('maintenance_task_id')->nullable()->constrained('maintenance_tasks')->nullOnDelete();
             $table->unsignedInteger('quantity')->default(1);
             $table->decimal('unit_cost_at_time', 10, 2)->default(0);
             $table->timestamps();

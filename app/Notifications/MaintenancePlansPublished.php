@@ -82,20 +82,5 @@ class MaintenancePlansPublished extends Notification implements ShouldQueue
             ->salutation('Com os melhores cumprimentos');
     }
 
-    public function toArray(object $notifiable): array
-    {
-        return [
-            'maintenance_plan_ids' => $this->maintenancePlans->pluck('id'),
-        ];
-    }
 
-    private function translateUnit(string $unit): string
-    {
-        return match ($unit) {
-            'day'   => 'dia(s)',
-            'month' => 'mês(es)',
-            'year'  => 'ano(s)',
-            default => $unit,
-        };
-    }
 }

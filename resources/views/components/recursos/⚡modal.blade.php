@@ -54,6 +54,7 @@ new class extends Component
         array_splice($this->photos, $index, 1);
     }
 
+
     public function save()
     {
         $this->validate(
@@ -63,6 +64,7 @@ new class extends Component
             )
         );
 
+        $isNew = !$this->recurso->exists;
 
         $this->recurso->fill([
             'name'        => $this->name,
@@ -73,17 +75,41 @@ new class extends Component
         ]);
         $this->recurso->save();
 
+
         foreach ($this->photos as $photo) {
             $path = $photo->store("resources/{$this->recurso->id}", 'public');
             $this->recurso->photos()->create(['path' => $path, 'disk' => 'public']);
         }
 
+
+        if ($isNew) {
+            Flux::toast('O recurso foi criada com sucesso!', variant: 'success', duration: 1000);
+
+            return $this->redirect(route('recursos.index'), navigate: true);
+        }
+
+        Flux::toast('O recurso foi atualizado com sucesso!', variant: 'success', duration: 1000);
+
         return $this->fechar();
+
     }
 
     public function fechar()
     {
-        return $this->redirect(request()->header('Referer'), navigate: true);
+        if (!$this->recurso->exists){
+            return $this->redirect(request()->header('Referer'?? route('recursos.index')), navigate: true);
+        }
+
+        $this->recurso->refresh();
+
+        $this->name = $this->recurso->name;
+        $this->description = $this->recurso->description;
+        $this->location = $this->recurso->location;
+        $this->section = $this->recurso->section;
+        $this->status = $this->recurso->status;
+
+        $this->resetErrorBag();
+
     }
 };
 ?>
@@ -178,10 +204,12 @@ new class extends Component
                     {{ $recurso && $recurso->exists ? 'Atualizar' : 'Criar' }}
                 </flux:button>
                 <flux:button wire:click="fechar" variant="danger" class="w-full">
-                    Cancelar
+                    {{ $recurso && $recurso->exists ? 'Recarregar' : 'Cancelar' }}
                 </flux:button>
             </div>
 
         </flux:card>
     </form>
 </div>
+
+

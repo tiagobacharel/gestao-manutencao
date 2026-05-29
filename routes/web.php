@@ -21,6 +21,10 @@ Volt::route('/pecas', 'pecas.⚡index')->name('pecas.index');
 Volt::route('/pecas/{part}', 'pecas.⚡show')->name('pecas.show');
 
 
+Volt::route('/tarefas', 'tarefas.⚡index')->name('tarefas.index');
+Volt::route('/tarefas/{task}', 'tarefas.⚡show')->name('tarefas.show');
+
+
 Volt::route('/calendar', '⚡calendar')->name('recursos.calendar');;
 
 Route::middleware(['auth', 'verified'])->group(function () {

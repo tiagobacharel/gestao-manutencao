@@ -42,12 +42,13 @@ test('editar o recurso', function () {
         'status'      => 'active',
     ]);
 
-    Livewire::test('recursos.⚡show', ['recurso' => $resource])
-        ->call('openModal')
-        ->assertSet('showModal', true)
-        ->assertSeeLivewire('recursos.modal');
 
     Livewire::test('recursos.modal', ['recurso' => $resource])
+        ->assertSet('name', 'OriginalRecurso')
+        ->assertSet('description', 'OriginalDescrição')
+        ->assertSet('location', 'OriginalLocalização')
+        ->assertSet('section', 'OriginalSecção')
+        ->assertSet('status', 'active')
         ->set('name', 'TesteRecurso')
         ->set('description', 'TesteDescrição')
         ->set('location', 'TesteLocalização')
@@ -71,13 +72,7 @@ test('editar o recurso', function () {
 
 test('apagar recurso', function () {
 
-    $resource = Resource::factory()->create([
-        'name' => 'OriginalRecurso',
-        'description' => 'OriginalDescrição',
-        'location'    => 'OriginalLocalização',
-        'section'     => 'OriginalSecção',
-        'status'      => 'active',
-    ]);
+    $resource = Resource::factory()->create();
 
 
     Livewire::test('recursos.⚡show', ['recurso' => $resource])
@@ -112,3 +107,4 @@ test('trocar estado do recurso', function () {
 
     $this->assertDatabaseCount('resources', 1);
 });
+

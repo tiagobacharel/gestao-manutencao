@@ -3,7 +3,9 @@
 namespace Database\Factories;
 
 use App\Models\Maintenance;
+use App\Models\MaintenancePart;
 use App\Models\MaintenancePlan;
+use App\Models\Part;
 use App\Models\Resource;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -14,7 +16,7 @@ class MaintenanceFactory extends Factory
 
     public function definition(): array
     {
-        $status = $this->faker->randomElement([
+        $status = fake()->randomElement([
             'pending', 'pending', 'pending',
             'done', 'done', 'done',
             'cancelled',
@@ -22,14 +24,14 @@ class MaintenanceFactory extends Factory
         ]);
 
         // scheduled_at sempre no passado para evitar conflito com done_at
-        $scheduledAt = $this->faker->dateTimeBetween('-6 months', '-1 day');
+        $scheduledAt = fake()->dateTimeBetween('-6 months', '-1 day');
 
         $doneAt = $status === 'done'
-            ? $this->faker->dateTimeBetween($scheduledAt, 'now')
+            ? fake()->dateTimeBetween($scheduledAt, 'now')
             : null;
 
         return [
-            'maintenance_plan_id' => $this->faker->boolean(60)
+            'maintenance_plan_id' => fake()->boolean(60)
                 ? MaintenancePlan::inRandomOrder()->first()?->id
                 : null,
             'resource_id'  => Resource::inRandomOrder()->first()->id,
@@ -37,8 +39,8 @@ class MaintenanceFactory extends Factory
             'scheduled_at' => $scheduledAt,
             'done_at'      => $doneAt,
             'status'       => $status,
-            'notes'        => $this->faker->optional(0.7)->paragraph()
-                ? $this->faker->randomFloat(2, 20, 2000)
+            'notes'        => fake()->optional(0.7)->paragraph()
+                ? fake()->randomFloat(2, 20, 2000)
                 : null,
         ];
     }
@@ -51,11 +53,11 @@ class MaintenanceFactory extends Factory
     public function done(): static
     {
         return $this->state(function () {
-            $scheduledAt = $this->faker->dateTimeBetween('-6 months', '-1 day');
+            $scheduledAt = fake()->dateTimeBetween('-6 months', '-1 day');
             return [
                 'status'       => 'done',
                 'scheduled_at' => $scheduledAt,
-                'done_at'      => $this->faker->dateTimeBetween($scheduledAt, 'now'),
+                'done_at'      => fake()->dateTimeBetween($scheduledAt, 'now'),
             ];
         });
     }
@@ -68,7 +70,7 @@ class MaintenanceFactory extends Factory
     public function withParts(int $count = 3): static
     {
         return $this->afterCreating(function (Maintenance $maintenance) use ($count) {
-            \App\Models\MaintenancePart::factory($count)->create([
+            MaintenancePart::factory($count)->create([
                 'maintenance_id' => $maintenance->id,
             ]);
         });
@@ -77,45 +79,93 @@ class MaintenanceFactory extends Factory
     public function withPlanBasedParts(): static
     {
         return $this->afterCreating(function (Maintenance $maintenance) {
+
+            // CENÁRIO A: Manutenção baseada num Plano
             if ($maintenance->maintenance_plan_id) {
                 $planParts = \App\Models\PlanPart::where('maintenance_plan_id', $maintenance->maintenance_plan_id)->get();
 
                 foreach ($planParts as $planPart) {
                     $part = $planPart->part;
 
-                    // SIMULAÇÃO DE DESVIO INDUSTRIAL:
-                    // 30% de probabilidade de o técnico gastar uma quantidade diferente da prevista no plano
                     $quantidadeReal = fake()->boolean(30)
                         ? $planPart->quantity + fake()->randomElement([-1, 1, 2])
                         : $planPart->quantity;
 
-                    // Garante que a quantidade nunca é zero ou negativa
                     $quantidadeReal = max(1, $quantidadeReal);
 
-                    // 20% de probabilidade de o preço ter sofrido uma ligeira flutuação no dia da compra
                     $custoCongelado = fake()->boolean(20)
                         ? ($part ? $part->current_unit_cost * fake()->randomFloat(2, 0.9, 1.1) : 0)
                         : ($part ? $part->current_unit_cost : 0);
 
-                    \App\Models\MaintenancePart::create([
-                        'maintenance_id'    => $maintenance->id,
-                        'part_id'           => $planPart->part_id,
-                        'quantity'          => $quantidadeReal, // Quantidade com desvio simulado
-                        'unit_cost_at_time' => $custoCongelado, // Preço com flutuação simulada
+                    // Encontra a tarefa correspondente na execução real
+                    $maintenanceTaskId = null;
+
+                    // Se o plano original tiver uma tarefa associada, tenta associar na manutenção
+                    if ($planPart->plan_task_id) {
+                        $taskId = \DB::table('plan_tasks')->where('id', $planPart->plan_task_id)->value('task_id');
+
+                        if ($taskId) {
+                            $maintenanceTaskId = \DB::table('maintenance_tasks')
+                                ->where('maintenance_id', $maintenance->id)
+                                ->where('task_id', $taskId)
+                                ->value('id');
+                        }
+                    }
+
+                    MaintenancePart::create([
+                        'maintenance_id'         => $maintenance->id,
+                        'part_id'                => $planPart->part_id,
+                        'maintenance_task_id'    => $maintenanceTaskId, // Será null se o plano não tiver tarefa
+                        'quantity'               => $quantidadeReal,
+                        'unit_cost_at_time'      => $custoCongelado,
                     ]);
                 }
+
+                // CENÁRIO B: Manutenção Avulsa (Pode ter tarefas manuais e peças)
             } else {
-                // Código para manutenção sem plano mantém-se igual...
-                $parts = \App\Models\Part::inRandomOrder()->take(rand(1, 3))->get();
+                $parts = Part::inRandomOrder()->take(rand(1, 3))->get();
+
                 foreach ($parts as $part) {
-                    \App\Models\MaintenancePart::create([
-                        'maintenance_id'    => $maintenance->id,
-                        'part_id'           => $part->id,
-                        'quantity'          => rand(1, 5),
-                        'unit_cost_at_time' => $part->current_unit_cost,
+                    // Modificado: Dá 60% de probabilidade de vincular a uma tarefa real, caso exista
+                    $randomTask = fake()->boolean(60)
+                        ? \DB::table('maintenance_tasks')
+                            ->where('maintenance_id', $maintenance->id)
+                            ->inRandomOrder()
+                            ->first()
+                        : null;
+
+                    MaintenancePart::create([
+                        'maintenance_id'         => $maintenance->id,
+                        'part_id'                => $part->id,
+                        'maintenance_task_id'    => $randomTask ? $randomTask->id : null,
+                        'quantity'               => rand(1, 5),
+                        'unit_cost_at_time'      => $part->current_unit_cost,
                     ]);
                 }
             }
         });
     }
+
+    public function withPlanBasedTasks(): self
+    {
+        return $this->afterCreating(function (\App\Models\Maintenance $maintenance) {
+            // Se tem plano, herda as tarefas do molde do plano
+            if ($maintenance->plan && $maintenance->plan->tasks->isNotEmpty()) {
+                foreach ($maintenance->plan->tasks as $task) {
+                    $maintenance->tasks()->attach($task->id, [
+                        'status' => fake()->randomElement(['pending', 'in_progress', 'completed']),
+                    ]);
+                }
+                // Se NÃO tem plano, injeta entre 1 a 3 tarefas aleatórias do catálogo geral
+            } else {
+                $randomCatalogTasks = \App\Models\Task::inRandomOrder()->take(rand(1, 3))->get();
+                foreach ($randomCatalogTasks as $task) {
+                    $maintenance->tasks()->attach($task->id, [
+                        'status' => fake()->randomElement(['pending', 'in_progress', 'completed']),
+                    ]);
+                }
+            }
+        });
+    }
+
 }

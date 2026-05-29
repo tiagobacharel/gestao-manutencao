@@ -34,6 +34,7 @@
         @if(($campo['type'] ?? 'text') === 'text')
             <div class="flex-1 min-w-[250px]">
                 <flux:input
+                    autocomplete="off"
                     wire:model.live.debounce.300ms="{{ $campo['model'] }}"
                     icon="{{ $campo['icon'] ?? 'magnifying-glass' }}"
                     placeholder="{{ $campo['placeholder'] ?? 'Procurar...' }}"
@@ -57,6 +58,7 @@
         @if($campo['type'] === 'custom-dropdown')
             <div class="w-full md:w-64 relative" x-data="{ open: false }">
                 <flux:input
+                    autocomplete="off"
                     wire:model.live.debounce.300ms="{{ $campo['searchModel'] }}"
                     placeholder="{{ $campo['label'] }}"
                     @focus="open = true"

@@ -1,117 +1,199 @@
 <?php
 
-use App\Models\MaintenancePart;
-use Livewire\Component;
-use App\Models\Maintenance;
-use App\Models\Part;
-use Illuminate\Support\Facades\DB;
+    use App\Models\MaintenancePart;
+    use Livewire\Attributes\On;
+    use Livewire\Component;
+    use App\Models\Maintenance;
+    use App\Models\Part;
+    use Illuminate\Support\Facades\DB;
 
-new class extends Component {
-    public ?Maintenance $manutencao = null;
+    new class extends Component {
+        public ?Maintenance $manutencao = null;
 
 
-    public array $maintenance_parts = [];
+        public array $maintenance_parts = [];
 
-    public function selectPeca(int $index, int $id, string $label): void
-    {
-        $this->maintenance_parts[$index]['part_id'] = (string)$id;
-        $this->maintenance_parts[$index]['search'] = $label;
-        $this->maintenance_parts[$index]['open'] = false;
-    }
-
-    public function mount(?Maintenance $manutencao = null): void
-    {
-        if ($manutencao && $manutencao->exists) {
-            $this->manutencao = $manutencao;
-            $this->maintenance_parts = $manutencao->parts()
-                ->select('parts.id as part_id', 'parts.name', 'parts.reference', 'maintenance_parts.quantity')
-                ->get()
-                ->map(fn($part) => [
-                    'part_id' => (string)$part->part_id,
-                    'quantity' => (int)$part->quantity,
-                    'search' => $part->name . ' / ' . $part->reference,
-                    'open' => false, // estava a faltar esta linha
-                ])
-                ->toArray();
-        } else {
-            $this->manutencao = new Maintenance();
+        public function selectPeca(int $index, int $id, string $label): void
+        {
+            $this->maintenance_parts[$index]['part_id'] = (string)$id;
+            $this->maintenance_parts[$index]['search'] = $label;
+            $this->maintenance_parts[$index]['open'] = false;
+            $this->maintenance_parts[$index]['unit_cost_at_time'] = Part::where('id', $id)->value('current_unit_cost') ?? 0;
         }
-    }
 
-    public function addPart(): void
-    {
-        $this->maintenance_parts[] = [
-            'part_id' => '',
-            'quantity' => 1,
-            'search' => '',
-            'open' => false,
-        ];
-    }
+        public function mount(?Maintenance $manutencao = null): void
+        {
+            if ($manutencao && $manutencao->exists) {
+                $this->manutencao = $manutencao;
 
-    public function removePart(int $index): void
-    {
-        unset($this->maintenance_parts[$index]);
-        $this->maintenance_parts = array_values($this->maintenance_parts);
-    }
+                $this->maintenance_parts = $manutencao->parts()
+                    ->select('parts.id as part_id', 'parts.name', 'parts.reference', 'maintenance_parts.quantity', 'maintenance_parts.unit_cost_at_time as unit_cost')
+                    ->where('maintenance_parts.maintenance_task_id', null)
+                    ->get()
+                    ->map(fn($part) => [
+                        'part_id' => (string)$part->part_id,
+                        'quantity' => (int)$part->quantity,
+                        'search' => $part->name . ' / ' . $part->reference,
+                        'open' => false,
+                        'unit_cost_at_time' => (float)$part->unit_cost,
+                    ])
+                    ->toArray();
+            } else {
+                $this->manutencao = new Maintenance();
+            }
+        }
 
-    public function save(): void
-    {
-        $this->validate(MaintenancePart::rules());
+        public function addPart(): void
+        {
+            $this->maintenance_parts[] = [
+                'part_id' => '',
+                'quantity' => 1,
+                'search' => '',
+                'open' => false,
+                'unit_cost_at_time' => 0,
+            ];
+        }
 
-        DB::transaction(function () {
-            $syncData = [];
+        public function removePart(int $index): void
+        {
+            unset($this->maintenance_parts[$index]);
+            $this->maintenance_parts = array_values($this->maintenance_parts);
+        }
 
-            $partIds = collect($this->maintenance_parts)->pluck('part_id')->filter()->toArray();
-            $partCosts = Part::whereIn('id', $partIds)->pluck('current_unit_cost', 'id');
+        #[On('salvar-tudo')]
+        public function save(): void
+        {
+            $this->validate(MaintenancePart::rules());
 
-            foreach ($this->maintenance_parts as $item) {
-                if (empty($item['part_id'])) continue;
+            DB::transaction(function () {
+                $formPartIds = [];
 
-                $syncData[$item['part_id']] = [
-                    'quantity' => $item['quantity'],
-                    'unit_cost_at_time' => $partCosts[$item['part_id']] ?? 0.00,
-                ];
+                // Processar cada peça vinda do formulário individualmente
+                foreach ($this->maintenance_parts as $item) {
+                    if (empty($item['part_id'])) continue;
+
+                    $formPartIds[] = $item['part_id'];
+
+                    // Procura se já existe esta peça gravada ESPECIFICAMENTE sem tarefa
+                    $pivotRow = $this->manutencao->parts()
+                        ->wherePivot('part_id', $item['part_id'])
+                        ->wherePivot('maintenance_task_id', null)
+                        ->first();
+
+                    if ($pivotRow) {
+                        // Se já existe sem tarefa, atualiza apenas esta linha específica usando o ID da pivot
+                        DB::table('maintenance_parts')
+                            ->where('id', $pivotRow->pivot->id)
+                            ->update([
+                                'quantity' => $item['quantity'],
+                                'unit_cost_at_time' => $item['unit_cost_at_time'] ?? 0.00,
+                                'updated_at' => now(),
+                            ]);
+                    } else {
+                        // Se não existe, insere um novo registo limpo sem tarefa
+                        $this->manutencao->parts()->attach($item['part_id'], [
+                            'maintenance_task_id' => null,
+                            'quantity' => $item['quantity'],
+                            'unit_cost_at_time' => $item['unit_cost_at_time'] ?? 0.00,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
+                // Apagar apenas os registos sem tarefa que foram removidos do formulário
+                $this->manutencao->parts()
+                    ->wherePivot('maintenance_task_id', null)
+                    ->wherePivotNotIn('part_id', $formPartIds)
+                    ->detach();
+            });
+
+
+            Flux::toast('As peças foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+
+            $this->fechar();
+        }
+
+
+        public function fechar()
+        {
+            if (!$this->manutencao->exists) {
+                return $this->redirect(request()->header('Referer') ?? route('manutencoes.index'), navigate: true);
             }
 
-            $this->manutencao->parts()->sync($syncData);
-        });
+            $this->manutencao->refresh();
 
-        $this->dispatch('pecas-atualizadas');
-        $this->fechar();
-    }
+            $this->mount($this->manutencao);
 
-    public function fechar(): mixed
-    {
-        return $this->redirect(request()->header('Referer') ?? route('manutencoes.index'), navigate: true);
-    }
+            $this->resetErrorBag();
 
-    public function with(): array
-    {
-        $pecas = [];
-        foreach ($this->maintenance_parts as $i => $part) {
-            $search = $part['search'] ?? '';
-            $pecas[$i] = Part::orderBy('name')
-                ->when(
-                    strlen($search) >= 1,
-                    fn($q) => $q->where(function ($q) use ($search) {
-                        $q->where('name', 'like', '%' . $search . '%')
-                            ->orWhere('reference', 'like', '%' . $search . '%');
-                    })
-                )
-                ->limit(10)
-                ->get(['id', 'name', 'reference']);
         }
 
-        return ['pecas' => $pecas];
-    }
-};
+        public function with(): array
+        {
+            $limparTexto = function($texto) {
+                if (empty($texto)) return '';
+                $semAcentos = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $texto);
+                return str_replace([' ', "'", '"', '`', '~', '^', '/'], '', strtolower($semAcentos));
+            };
+
+            $pecas = [];
+            $pecasPadrao = null;
+
+            foreach ($this->maintenance_parts as $i => $part) {
+                if (!($part['open'] ?? false)) {
+                    $pecas[$i] = collect();
+                    continue;
+                }
+
+                $search = $part['search'] ?? '';
+
+                if (blank($search)) {
+                    if (is_null($pecasPadrao)) {
+                        $pecasPadrao = Part::orderBy('name')->limit(10)->get(['id', 'name', 'reference']);
+                    }
+                    $pecas[$i] = $pecasPadrao;
+                    continue;
+                }
+
+                $termosOriginais = array_filter(explode('/', $search));
+                $termosLinha = array_filter(array_map($limparTexto, $termosOriginais));
+
+                if (empty($termosLinha)) {
+                    $pecas[$i] = collect();
+                    continue;
+                }
+
+                $query = Part::orderBy('name');
+                foreach ($termosOriginais as $t) {
+                    $t = trim($t);
+                    if (blank($t)) continue;
+                    $query->where(function ($sub) use ($t) {
+                        $sub->where('name', 'like', '%' . $t . '%')
+                            ->orWhere('reference', 'like', '%' . $t . '%');
+                    });
+                }
+
+                $resultados = $query->limit(50)->get(['id', 'name', 'reference']);
+
+                $pecas[$i] = $resultados->filter(fn($p) =>
+                    collect($termosLinha)->every(fn($t) =>
+                        str_contains($limparTexto($p->name) . $limparTexto($p->reference), $t)
+                    )
+                )->take(10)->values();
+            }
+
+            return ['pecas' => $pecas];
+        }
+
+    };
 ?>
 
 <div>
     <flux:card class="space-y-6">
 
         <div>
-            <flux:heading size="lg">Peças Utilizadas</flux:heading>
+            <flux:heading size="lg">Peças sem Tarefa</flux:heading>
             <flux:text size="sm" class="text-zinc-400 mt-1">
                 Adicione ou remova as peças gastas nesta manutenção.
             </flux:text>
@@ -128,87 +210,174 @@ new class extends Component {
             @endif
 
             <div class="space-y-3">
-                @foreach($maintenance_parts as $index => $item)
-                    <div class="flex gap-2 items-start"> {{-- linha inteira --}}
+                <div class="space-y-4">
+                    @foreach($maintenance_parts as $index => $item)
+                        @php
+                            $custoUnitario = (float)($item['unit_cost_at_time'] ?? 0);
+                        @endphp
 
-                        <div class="flex-1"> {{-- input de pesquisa --}}
-                            <flux:input
-                                label="{{ $index === 0 ? 'Peça' : '' }}"
-                                wire:model.live.debounce.300ms="maintenance_parts.{{ $index }}.search"
-                                wire:focus="$set('maintenance_parts.{{ $index }}.open', true)"
-                                @keydown.escape="$wire.set('maintenance_parts.{{ $index }}.open', false)"
-                                placeholder="Pesquisar peça..."
-                                autocomplete="off"
-                                icon="magnifying-glass"
-                            />
+                        {{-- TELEMÓVEL --}}
+                        <div class="block md:hidden p-4 mb-4 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-800/60 shadow-sm">
+                            <div class="grid grid-cols-12 gap-3 items-end w-full">
 
-                            <div class="relative">
-                                @if($item['open'] && isset($pecas[$index]))
-                                    <ul class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg">
-                                        @forelse($pecas[$index] as $peca)
-                                            <li
-                                                wire:click="selectPeca({{ $index }}, {{ $peca->id }}, '{{ addslashes($peca->name . ' / ' . $peca->reference) }}')"
-                                                class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex justify-between gap-2"
-                                            >
-                                                <span>{{ $peca->name }}</span>
-                                                <span class="text-zinc-400 text-xs">{{ $peca->reference }}</span>
-                                            </li>
-                                        @empty
-                                            <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">
-                                                Nenhuma peça encontrada
-                                            </li>
-                                        @endforelse
-                                    </ul>
-                                @endif
+                                <div class="col-span-12 relative" x-data="{ localOpen: false }" x-on:click.outside="localOpen = false">
+                                    <flux:field>
+                                        @if($index === 0) <flux:label class="mb-1 block">Peça</flux:label> @endif
+                                        <flux:input
+                                            wire:model.live.debounce.300ms="maintenance_parts.{{ $index }}.search"
+                                            wire:focus="$set('maintenance_parts.{{ $index }}.open', true)"
+                                            @focus="localOpen = true"
+                                            @click="localOpen = true"
+                                            @touchstart.passive="localOpen = true; $wire.set('maintenance_parts.{{ $index }}.open', true)"
+                                            @keydown.escape="localOpen = false; $wire.set('maintenance_parts.{{ $index }}.open', false)"
+                                            placeholder="Pesquisar nome / referencia"
+                                            autocomplete="off"
+                                            icon="magnifying-glass"
+                                        />
+                                    </flux:field>
+
+                                    <div x-show="localOpen" x-cloak class="relative">
+                                        @if($item['open'] && isset($pecas[$index]))
+                                            <ul class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg">
+                                                @forelse($pecas[$index] as $peca)
+                                                    <li
+                                                        @touchend.prevent="localOpen = false; $wire.selectPeca({{ $index }}, {{ $peca->id }}, '{{ addslashes($peca->name . ' / ' . $peca->reference) }}')"
+                                                        wire:click="selectPeca({{ $index }}, {{ $peca->id }}, '{{ addslashes($peca->name . ' / ' . $peca->reference) }}')"
+                                                        @click="localOpen = false"
+                                                        class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex justify-between gap-2"
+                                                    >
+                                                        <span>{{ $peca->name }}</span>
+                                                        <span class="text-zinc-400 text-xs">{{ $peca->reference }}</span>
+                                                    </li>
+                                                @empty
+                                                    <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">Nenhuma peça encontrada</li>
+                                                @endforelse
+                                            </ul>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="col-span-4">
+                                    <flux:field>
+                                        @if($index === 0) <flux:label class="mb-1 block">Quantidade</flux:label> @endif
+                                        <flux:input type="number" min="1" wire:model.live.debounce.300ms="maintenance_parts.{{ $index }}.quantity" class="w-full" />
+                                    </flux:field>
+                                </div>
+
+                                <div class="col-span-3 text-right text-sm text-zinc-500 flex flex-col justify-end pb-2">
+                                    <span class="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1 block truncate">Custo Un.</span>
+                                    <div class="h-10 flex items-center justify-end">{{ number_format($custoUnitario, 2, ',', '.') }} €</div>
+                                </div>
+
+                                <div class="col-span-3 text-right text-sm font-medium text-zinc-800 dark:text-zinc-200 flex flex-col justify-end pb-2">
+                                    <span class="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-1 block truncate">Total</span>
+                                    <div class="h-10 flex items-center justify-end">{{ number_format(intval($item['quantity'] ?? 0) * $custoUnitario, 2, ',', '.') }} €</div>
+                                </div>
+
+                                <div class="col-span-2 text-right pr-0.5">
+                                    <flux:button type="button" variant="danger" icon="trash" wire:click="removePart({{ $index }})" square class="w-full" />
+                                </div>
+                            </div>
+                            @error("maintenance_parts.$index.quantity") <flux:error class="mt-2">{{ $message }}</flux:error> @enderror
+                        </div>
+
+                        {{-- COMPUTADOR --}}
+                        <div class="hidden md:flex md:gap-2 md:items-start md:w-full md:mb-3">
+
+                            <div class="md:flex-1 relative" x-data="{ localOpen: false }" x-on:click.outside="localOpen = false; $wire.set('maintenance_parts.{{ $index }}.open', false)">
+                                <flux:field>
+                                    @if($index === 0) <flux:label class="mb-1.5 block">Peça</flux:label> @endif
+                                    <flux:input
+                                        wire:model.live.debounce.300ms="maintenance_parts.{{ $index }}.search"
+                                        wire:focus="$set('maintenance_parts.{{ $index }}.open', true)"
+                                        @focus="localOpen = true"
+                                        @click="localOpen = true"
+                                        @keydown.escape="localOpen = false; $wire.set('maintenance_parts.{{ $index }}.open', false)"
+                                        placeholder="Pesquisar nome / referencia"
+                                        autocomplete="off"
+                                        icon="magnifying-glass"
+                                    />
+                                </flux:field>
+
+                                <div x-show="localOpen" x-cloak class="relative">
+                                    @if($item['open'] && isset($pecas[$index]))
+                                        <ul class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-1 shadow-lg">
+                                            @forelse($pecas[$index] as $peca)
+                                                <li
+                                                    wire:click="selectPeca({{ $index }}, {{ $peca->id }}, '{{ addslashes($peca->name . ' / ' . $peca->reference) }}')"
+                                                    @click="localOpen = false"
+                                                    class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex justify-between gap-2"
+                                                >
+                                                    <span>{{ $peca->name }}</span>
+                                                    <span class="text-zinc-400 text-xs">{{ $peca->reference }}</span>
+                                                </li>
+                                            @empty
+                                                <li class="px-3 py-4 text-sm text-center text-zinc-400 dark:text-zinc-500">Nenhuma peça encontrada</li>
+                                            @endforelse
+                                        </ul>
+                                    @endif
+                                </div>
                             </div>
 
-                            @error("maintenance_parts.$index.part_id")
-                            <flux:error>{{ $message }}</flux:error>
-                            @enderror
-                        </div>
+                            <div class="md:w-24 md:shrink-0">
+                                <flux:field>
+                                    @if($index === 0) <flux:label class="mb-1.5 block">Quantidade</flux:label> @endif
+                                    <flux:input type="number" min="1" wire:model.live.debounce.300ms="maintenance_parts.{{ $index }}.quantity" class="w-full" />
+                                </flux:field>
+                                @error("maintenance_parts.$index.quantity") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                            </div>
 
-                        <div class="w-24 shrink-0"> {{-- quantidade --}}
-                            <flux:input
-                                label="{{ $index === 0 ? 'Qtd.' : '' }}"
-                                type="number"
-                                min="1"
-                                wire:model="maintenance_parts.{{ $index }}.quantity"
-                                class="w-full"
-                            />
-                            @error("maintenance_parts.$index.quantity")
-                            <flux:error>{{ $message }}</flux:error>
-                            @enderror
-                        </div>
+                            <div class="md:w-24 md:shrink-0 text-right text-sm text-zinc-500 flex flex-col justify-end">
+                                @if($index === 0) <span class="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2 block truncate">Custo Unit.</span> @endif
+                                <div class="h-10 flex items-center justify-end">{{ number_format($custoUnitario, 2, ',', '.') }} €</div>
+                            </div>
 
-                        <div class="shrink-0 {{ $index === 0 ? 'mt-6' : '' }}"> {{-- botão apagar --}}
-                            <flux:button
-                                type="button"
-                                variant="danger"
-                                icon="trash"
-                                wire:click="removePart({{ $index }})"
-                                square
-                            />
-                        </div>
+                            <div class="md:w-24 md:shrink-0 text-right text-sm font-medium text-zinc-800 dark:text-zinc-200 flex flex-col justify-end">
+                                @if($index === 0) <span class="text-xs font-medium text-zinc-400 dark:text-zinc-500 mb-2 block truncate">Total Est.</span> @endif
+                                <div class="h-10 flex items-center justify-end">{{ number_format(intval($item['quantity'] ?? 0) * $custoUnitario, 2, ',', '.') }} €</div>
+                            </div>
 
-                    </div> {{-- fecha linha --}}
-                @endforeach
+                            <div class="md:shrink-0 md:w-10 {{ $index === 0 ? 'md:mt-6' : '' }}">
+                                <flux:button type="button" variant="danger" icon="trash" wire:click="removePart({{ $index }})" square class="w-full md:w-10" />
+                            </div>
+
+                        </div>
+                    @endforeach
+                </div>
+
+
+                @php
+                    $totalGeralPlan = collect($maintenance_parts)->sum(function($item) {
+                        return intval($item['quantity'] ?? 0) * (float)($item['unit_cost_at_time'] ?? 0);
+                    });
+                @endphp
+
+                <div class="flex justify-between md:justify-end gap-3 pt-4">
+                    <div class="text-sm font-medium text-zinc-500 py-1">
+                        Total Geral:
+                    </div>
+                    <div class="text-base font-bold text-zinc-900 dark:text-white py-0.5 md:w-24 text-right">
+                        {{ number_format($totalGeralPlan, 2, ',', '.') }} €
+                    </div>
+                    <div class="hidden md:block w-10"></div>
+                </div>
             </div>
 
-
-            <flux:button type="button" size="sm" icon="plus" wire:click="addPart">
+            <flux:button type="button" size="sm" icon="plus" wire:click="addPart" class="w-full md:w-auto">
                 Adicionar Peça
             </flux:button>
 
         </div>
 
-        <div class="flex gap-2 w-full">
+        <div class="flex items-center gap-2">
             <flux:button type="button" variant="primary" wire:click="save" class="w-full">
-                Gravar Peças
+                {{ $manutencao && $manutencao->exists ? 'Atualizar' : 'Criar' }}
             </flux:button>
             <flux:button type="button" wire:click="fechar" variant="danger" class="w-full">
-                Cancelar
+                {{ $manutencao && $manutencao->exists ? 'Recarregar' : 'Cancelar' }}
             </flux:button>
         </div>
 
     </flux:card>
 </div>
+

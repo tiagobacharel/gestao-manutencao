@@ -6,6 +6,7 @@ use App\Models\Maintenance;
 use App\Models\MaintenancePlan;
 use App\Models\Part;
 use App\Models\Resource;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -18,16 +19,21 @@ class DatabaseSeeder extends Seeder
             'email' => 'test@example.com',
         ]);
 
-        Resource::factory(100)->create();
+        Resource::factory(5000)->create();
 
-        $parts = Part::factory(50)->create();
+        $parts = Part::factory(10000)->create();
 
-        MaintenancePlan::factory(20)
-            ->withPlanParts(1, 5, $parts)
+        $tasks = Task::factory(2500)->create();
+
+        MaintenancePlan::factory(100)
+            ->withPlanTasks(5, 20, $tasks)
+            ->withPlanParts(10, 50, $parts)
             ->create();
 
-        Maintenance::factory(50)
+        Maintenance::factory(150)
+            ->withPlanBasedTasks()
             ->withPlanBasedParts()
             ->create();
+
     }
 }

@@ -4,87 +4,109 @@ use App\Models\Resource;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
-new class extends Component {
-    use WithPagination;
+    new class extends Component {
+        use WithPagination;
 
-    public $search = '';
-    public $status = '';
-    public $location = '';
-    public $section = '';
-    public string $sortBy = 'created_at';
-    public string $sortDir = 'desc';
+        public $search = '';
+        public $status = '';
+        public $location = '';
+        public $section = '';
+        public string $sortBy = 'created_at';
+        public string $sortDir = 'desc';
 
-    public function rendering($view)
-    {
-        $view->layoutData(['title' => 'Recursos']);
-    }
+        public function rendering($view)
+        {
+            $view->layoutData(['title' => 'Recursos']);
+        }
 
-    public function with(): array
-    {
-        return [
-            'configFiltros' => [
-                [
-                    'type' => 'text',
-                    'model' => 'search',
-                    'placeholder' => 'Procurar recursos...',
-                ],
-                [
-                    'type' => 'select',
-                    'model' => 'status',
-                    'label' => 'Todos os estados',
-                    'options' => [
-                        'active' => 'Ativo',
-                        'inactive' => 'Inativo',
+        public array $locationOptions = [];
+        public array $sectionOptions = [];
+
+        public function mount(): void
+        {
+            $this->locationOptions = Resource::distinct()
+                ->whereNotNull('location')
+                ->where('location', '!=', '')
+                ->pluck('location', 'location')
+                ->toArray();
+
+            $this->sectionOptions = Resource::distinct()
+                ->whereNotNull('section')
+                ->where('section', '!=', '')
+                ->pluck('section', 'section')
+                ->toArray();
+        }
+
+        protected mixed $recursosCache = null;
+
+        public function with(): array
+        {
+            if ($this->recursosCache == null){
+                $this->recursosCache = Resource::query()
+                    ->when($this->search, fn($q) => $q->where('name', 'like', '%'.$this->search.'%'))
+                    ->when($this->status, fn($q) => $q->where('status', $this->status))
+                    ->when($this->location, fn($q) => $q->where('location', $this->location))
+                    ->when($this->section, fn($q) => $q->where('section', $this->section))
+                    ->latest()
+                    ->paginate(15);
+            }
+            return [
+                'configFiltros' => [
+                    [
+                        'type' => 'text',
+                        'model' => 'search',
+                        'placeholder' => 'Procurar recursos...',
                     ],
+                    [
+                        'type' => 'select',
+                        'model' => 'status',
+                        'label' => 'Todos os estados',
+                        'options' => [
+                            'active' => 'Ativo',
+                            'inactive' => 'Inativo',
+                        ],
+                    ],
+                    [
+                        'type' => 'select',
+                        'model' => 'location',
+                        'label' => 'Localização',
+                        'options' => $this->locationOptions,
+                    ],
+                    [
+                        'type' => 'select',
+                        'model' => 'section',
+                        'label' => 'Secção / Dept.',
+                        'icon' => 'building-office',
+                        'options' => $this->sectionOptions,
+                        ],
                 ],
-                [
-                    'type' => 'select',
-                    'model' => 'location',
-                    'label' => 'Localização',
-                    'options' => Resource::distinct()->whereNotNull('location')->where('location', '!=', '')->pluck('location', 'location')->toArray(),
+
+                'valoresAtuais' => [
+                    'search' => $this->search,
+                    'status' => $this->status,
+                    'location' => $this->location,
+                    'section'  => $this->section,
                 ],
-                [
-                    'type' => 'select',
-                    'model' => 'section',
-                    'label' => 'Secção / Dept.',
-                    'icon' => 'building-office',
-                    'options' => Resource::distinct()->whereNotNull('section')->where('location', '!=', '')->pluck('section', 'section')->toArray(),
-                ],
-            ],
 
-            'valoresAtuais' => [
-                'search' => $this->search,
-                'status' => $this->status,
-                'location' => $this->location,
-                'section'  => $this->section,
-            ],
+                'recursos' => $this->recursosCache,
+            ];
+        }
 
-            'recursos' => Resource::query()
-                ->when($this->search, fn($q) => $q->where('name', 'like', '%'.$this->search.'%'))
-                ->when($this->status, fn($q) => $q->where('status', $this->status))
-                ->when($this->location, fn($q) => $q->where('location', $this->location))
-                ->when($this->section, fn($q) => $q->where('section', $this->section))
-                ->latest()
-                ->paginate(15),
-        ];
-    }
+        public bool $showModal = false;
 
-    public bool $showModal = false;
-
-    public function openModal() { $this->showModal = true; }
+        public function openModal() { $this->showModal = true; }
 
 };
 ?>
 
-
 <div class="space-y-6">
 
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-            <flux:heading size="xl" level="1">Recursos</flux:heading>
+            <flux:heading size="xl" level="1">Recursos ({{ $recursos->total() }})</flux:heading>
         </div>
 
-        <flux:button variant="primary" icon="plus" wire:click="openModal">
+        <flux:button variant="primary" icon="plus" wire:click="openModal" class="w-full sm:w-auto">
             Criar Recurso
         </flux:button>
     </div>
@@ -95,19 +117,19 @@ new class extends Component {
         <livewire:recursos.modal />
     @endif
 
-
     <x-filtros-bar :config="$configFiltros" :valores="$valoresAtuais" />
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {{-- TELEMÓVEL --}}
+    <div class="grid grid-cols-1 gap-4 md:hidden">
         @forelse ($recursos as $recurso)
-            <a href="{{ route('resource.show', $recurso) }}" wire:navigate class="group decoration-none">
-                <flux:card class="h-full transition-all duration-200 border-zinc-200 hover:border-primary-500 hover:shadow-lg dark:hover:bg-zinc-800">
+            <a href="{{ route('resource.show', $recurso) }}" wire:navigate class="group decoration-none block">
+                <flux:card class="h-full border-zinc-200 hover:border-primary-500 hover:shadow-lg dark:hover:bg-zinc-800">
                     <div class="flex flex-col h-full">
                         <div class="flex items-start justify-between">
                             <flux:heading size="lg" class="group-hover:text-primary-600 transition-colors">
                                 {{ $recurso->name }}
                             </flux:heading>
-                            <flux:icon name="arrow-up-right" class="text-zinc-400 group-hover:text-primary-500 transition-colors" variant="micro"/>
+                            <flux:icon name="pencil-square" class="text-zinc-400 group-hover:text-primary-500 transition-colors" variant="micro"/>
                         </div>
 
                         <flux:text class="mt-2 line-clamp-2 flex-grow">
@@ -115,7 +137,6 @@ new class extends Component {
                         </flux:text>
 
                         <div class="mt-4 flex items-center gap-4">
-
                             <flux:badge size="sm" :color="$recurso->status === 'active' ? 'green' : 'red'">
                                 {{ $recurso->status === 'active' ? 'Ativo' : 'Inativo' }}
                             </flux:badge>
@@ -134,19 +155,82 @@ new class extends Component {
                                 </div>
                             @endif
                         </div>
-
                     </div>
                 </flux:card>
             </a>
         @empty
-            <div class="col-span-full py-12 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 rounded-xl">
+            <div class="py-12 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 rounded-xl">
                 <flux:icon name="archive-box" class="text-zinc-300 w-12 h-12" />
                 <flux:heading class="mt-4">Nenhum recurso encontrado</flux:heading>
                 <flux:subheading>Começa por criar o teu primeiro equipamento.</flux:subheading>
             </div>
         @endforelse
     </div>
+
+    {{-- COMPUTADOR --}}
+    @if($recursos->isNotEmpty())
+        <flux:card class="p-0 overflow-hidden hidden md:block border-zinc-200/80 dark:border-zinc-800/80 shadow-sm">
+            <flux:table>
+                <flux:table.columns>
+                    <flux:table.column>Nome</flux:table.column>
+                    <flux:table.column>Descrição</flux:table.column>
+                    <flux:table.column>Localização</flux:table.column>
+                    <flux:table.column>Secção</flux:table.column>
+                    <flux:table.column>Estado</flux:table.column>
+                    <flux:table.column></flux:table.column>
+                </flux:table.columns>
+
+                <flux:table.rows>
+                    @foreach($recursos as $recurso)
+                        <flux:table.row :key="$recurso->id">
+
+                            <flux:table.cell>
+                                <span class="font-medium text-sm text-zinc-900 dark:text-white">{{ $recurso->name }}</span>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                @if($recurso->description)
+                                    <span class="text-sm text-zinc-500 truncate block max-w-xs" title="{{ $recurso->description }}">
+                                        {{ $recurso->description }}
+                                    </span>
+                                @else
+                                    <span class="text-xs text-zinc-400">—</span>
+                                @endif
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                <span class="text-sm text-zinc-500">{{ $recurso->location ?? '—' }}</span>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                <span class="text-sm text-zinc-500">{{ $recurso->section ?? '—' }}</span>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                <flux:badge size="sm" :color="$recurso->status === 'active' ? 'green' : 'red'">
+                                    {{ $recurso->status === 'active' ? 'Ativo' : 'Inativo' }}
+                                </flux:badge>
+                            </flux:table.cell>
+
+                            <flux:table.cell>
+                                <flux:button
+                                    variant="subtle"
+                                    size="sm"
+                                    icon="pencil-square"
+                                    href="{{ route('resource.show', $recurso) }}"
+                                    wire:navigate
+                                />
+                            </flux:table.cell>
+
+                        </flux:table.row>
+                    @endforeach
+                </flux:table.rows>
+            </flux:table>
+        </flux:card>
+    @endif
+
     {{ $recursos->links('components.pagination', ['color' => 'primary']) }}
 </div>
+
 
 

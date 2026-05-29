@@ -1,12 +1,12 @@
 <?php
 
+use Livewire\Attributes\On;
 use Livewire\Component;
 use App\Models\Maintenance;
 use App\Models\MaintenancePlan;
 use App\Models\Resource;
 
-new class extends Component
-{
+new class extends Component {
     public ?Maintenance $manutencao = null;
 
     public $maintenance_plan_id = '';
@@ -24,47 +24,51 @@ new class extends Component
 
     public function selectRecurso(int $id, string $nome): void
     {
-        $this->resource_id    = $id;
+        $this->resource_id = $id;
         $this->recurso_search = $nome;
-        $this->recurso_open   = false;
+        $this->recurso_open = false;
     }
 
     public function selectPlano(int $id, string $nome): void
     {
         $this->maintenance_plan_id = $id;
-        $this->plano_search        = $nome;
-        $this->plano_open          = false;
+        $this->plano_search = $nome;
+        $this->plano_open = false;
     }
 
     public function mount(?Maintenance $manutencao = null): void
     {
         if ($manutencao && $manutencao->exists) {
-            $this->manutencao           = $manutencao;
-            $this->maintenance_plan_id  = $manutencao->maintenance_plan_id ?? '';
-            $this->resource_id          = $manutencao->resource_id;
-            $this->scheduled_at         = $manutencao->scheduled_at?->format('Y-m-d') ?? '';
-            $this->status               = $manutencao->status;
-            $this->notes                = $manutencao->notes ?? '';
+            $this->manutencao = $manutencao;
+            $this->maintenance_plan_id = $manutencao->maintenance_plan_id ?? '';
+            $this->resource_id = $manutencao->resource_id;
+            $this->scheduled_at = $manutencao->scheduled_at?->format('Y-m-d') ?? '';
+            $this->status = $manutencao->status;
+            $this->notes = $manutencao->notes ?? '';
 
             $this->recurso_search = $manutencao->resource->name ?? '';
 
-            $this->plano_search = $manutencao->maintenancePlan->name ?? '';
+            $this->plano_search = $manutencao->plan->name ?? '';
+
 
         } else {
             $this->manutencao = new Maintenance();
         }
     }
 
-    public function save(): void
+    #[On('salvar-tudo')]
+    public function save()
     {
         $this->validate(Maintenance::rules());
 
+        $isNew = !$this->manutencao->exists;
+
         $this->manutencao->fill([
             'maintenance_plan_id' => $this->maintenance_plan_id ?: null,
-            'resource_id'         => $this->resource_id,
-            'scheduled_at'        => $this->scheduled_at ?: null,
-            'status'              => $this->status,
-            'notes'               => $this->notes ?: null,
+            'resource_id' => $this->resource_id,
+            'scheduled_at' => $this->scheduled_at ?: null,
+            'status' => $this->status,
+            'notes' => $this->notes ?: null,
             /*
               'created_by'          => $this->manutencao->exists
                 ? $this->manutencao->created_by
@@ -73,13 +77,30 @@ new class extends Component
         ]);
         $this->manutencao->save();
 
-        $this->dispatch('manutencao-saved');
+        if ($isNew) {
+            Flux::toast('A manutenção foi criada com sucesso!', variant: 'success', duration: 1000);
+
+            return $this->redirect(route('manutencoes.index'), navigate: true);
+        }
+
+        Flux::toast(text: 'A manutenção foi guardada com sucesso!', variant: 'success', duration: 1000);
+
         $this->fechar();
     }
 
     public function fechar()
     {
-        return $this->redirect(request()->header('Referer') ?? route('manutencoes.index'), navigate: true);
+        if (!$this->manutencao->exists) {
+            return $this->redirect(
+                request()->header('Referer') ?? route('manutencoes.index'),
+                navigate: true
+            );
+        }
+
+        $this->manutencao->refresh();
+        $this->mount($this->manutencao);
+        $this->resetErrorBag();
+
     }
 
     public function with(): array
@@ -112,12 +133,9 @@ new class extends Component
                 <flux:heading size="lg">
                     {{ $manutencao && $manutencao->exists ? 'Editar Manutenção' : 'Nova Manutenção' }}
                 </flux:heading>
-                <flux:text size="sm" class="text-zinc-400 mt-1">
-                    {{ $manutencao && $manutencao->exists ? "Manutenção #{$manutencao->id}" : 'Preenche os dados abaixo.' }}
-                </flux:text>
             </div>
 
-            <flux:separator variant="subtle" />
+            <flux:separator variant="subtle"/>
 
             <div class="space-y-4">
 
@@ -162,7 +180,7 @@ new class extends Component
                         </ul>
                     </div>
 
-                    <flux:error name="resource_id" />
+                    <flux:error name="resource_id"/>
                 </div>
 
                 <div x-data="{ open: @entangle('plano_open') }">
@@ -213,7 +231,7 @@ new class extends Component
                         </ul>
                     </div>
 
-                    <flux:error name="maintenance_plan_id" />
+                    <flux:error name="maintenance_plan_id"/>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -246,7 +264,7 @@ new class extends Component
                     {{ $manutencao && $manutencao->exists ? 'Atualizar' : 'Criar' }}
                 </flux:button>
                 <flux:button type="button" wire:click="fechar" variant="danger" class="w-full">
-                    Cancelar
+                    {{ $manutencao && $manutencao->exists ? 'Recarregar' : 'Cancelar' }}
                 </flux:button>
             </div>
 

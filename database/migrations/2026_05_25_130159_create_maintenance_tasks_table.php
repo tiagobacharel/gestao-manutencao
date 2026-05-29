@@ -11,12 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('plan_parts', function (Blueprint $table) {
+        Schema::create('maintenance_tasks', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('maintenance_plan_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('part_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('plan_task_id')->nullable()->constrained()->nullOnDelete();
-            $table->unsignedInteger('quantity')->default(1);
+            $table->foreignId('maintenance_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('task_id')->constrained()->cascadeOnDelete();
+            $table->string('status')->default('pending'); // 'pending', 'in_progress', 'completed'
             $table->timestamps();
         });
     }
@@ -26,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('plan_parts');
+        Schema::dropIfExists('maintenance_tasks');
     }
 };

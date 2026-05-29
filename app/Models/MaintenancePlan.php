@@ -73,7 +73,7 @@ class MaintenancePlan extends Model
     public function parts(): BelongsToMany
     {
         return $this->belongsToMany(Part::class, 'plan_parts', 'maintenance_plan_id', 'part_id')
-            ->withPivot('quantity');
+            ->withPivot('id', 'quantity');
     }
 
     public function planParts(): HasMany
@@ -81,10 +81,16 @@ class MaintenancePlan extends Model
         return $this->hasMany(PlanPart::class, 'maintenance_plan_id');
     }
 
+    public function tasks() {
+        return $this->belongsToMany(Task::class, 'plan_tasks');
+    }
+
+
     public function getEstimatedCostAttribute(): float
     {
         return $this->planParts->sum(
             fn($p) => $p->quantity * ($p->part?->current_unit_cost ?? 0)
         );
     }
+
 }

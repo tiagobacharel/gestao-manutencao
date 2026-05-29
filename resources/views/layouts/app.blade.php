@@ -10,6 +10,15 @@
     @fluxAppearance
 </head>
 <body class="min-h-screen bg-white dark:bg-zinc-800 antialiased">
+
+@persist('toast')
+    <flux:toast.group position="top end" class="pt-6 pr-6 space-y-3" expanded>
+        <flux:toast class="!bg-slate-900 !text-white !rounded-xl !shadow-2xl !border !border-slate-800 !p-4 !backdrop-blur-md" />
+    </flux:toast.group>
+@endpersist
+
+
+
 <flux:header container class="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
     <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 
@@ -18,10 +27,11 @@
     <flux:navbar class="-mb-px max-lg:hidden">
         <flux:navbar.item icon="home" href="/" wire:navigate>Home</flux:navbar.item>
         <flux:navbar.item icon="calendar" href="/calendar" wire:navigate>Calendário</flux:navigate>
-        <flux:navbar.item icon="wrench" :badge="App\Models\Maintenance::count()" href="/manutencoes" wire:navigate>Manutenções</flux:navbar.item>
-        <flux:navbar.item icon="document-text" :badge="App\Models\MaintenancePlan::count()" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:navbar.item>
-        <flux:navbar.item icon="inbox" :badge="App\Models\Resource::count()" href="/recursos" wire:navigate>Recursos</flux:navbar.item>
-        <flux:navbar.item icon="clipboard-document-list" :badge="App\Models\Part::count()" href="/pecas" wire:navigate>Peças</flux:navbar.item>
+        <flux:navbar.item icon="clipboard-document-check" href="/tarefas" wire:navigate>Tarefas</flux:navbar.item>
+        <flux:navbar.item icon="wrench" href="/manutencoes" wire:navigate>Manutenções</flux:navbar.item>
+        <flux:navbar.item icon="document-text" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:navbar.item>
+        <flux:navbar.item icon="inbox" href="/recursos" wire:navigate>Recursos</flux:navbar.item>
+        <flux:navbar.item icon="clipboard-document-list" href="/pecas" wire:navigate>Peças</flux:navbar.item>
     </flux:navbar>
 
     <flux:spacer />
@@ -48,10 +58,11 @@
     <flux:sidebar.nav>
         <flux:sidebar.item icon="home" href="/" wire:navigate>Home</flux:sidebar.item>
         <flux:sidebar.item icon="calendar" href="/calendar" wire:navigate>Calendário</flux:sidebar.item>
-        <flux:sidebar.item icon="wrench" :badge="App\Models\Maintenance::count()" href="/manutencoes" wire:navigate>Manutenções</flux:sidebar.item>
-        <flux:sidebar.item icon="document-text" :badge="App\Models\MaintenancePlan::count()" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:sidebar.item>
-        <flux:sidebar.item icon="inbox" :badge="App\Models\Resource::count()" href="/recursos" wire:navigate>Recursos</flux:sidebar.item>
-        <flux:sidebar.item icon="clipboard-document-list" :badge="App\Models\Part::count()" href="/pecas" wire:navigate>Peças</flux:sidebar.item>
+        <flux:sidebar.item icon="clipboard-document-check"  href="/tarefas" wire:navigate>Tarefas</flux:sidebar.item>
+        <flux:sidebar.item icon="wrench"  href="/manutencoes" wire:navigate>Manutenções</flux:sidebar.item>
+        <flux:sidebar.item icon="document-text"  href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:sidebar.item>
+        <flux:sidebar.item icon="inbox"  href="/recursos" wire:navigate>Recursos</flux:sidebar.item>
+        <flux:sidebar.item icon="clipboard-document-list"  href="/pecas" wire:navigate>Peças</flux:sidebar.item>
     </flux:sidebar.nav>
 
     <flux:sidebar.spacer />
@@ -64,6 +75,7 @@
 
     <flux:separator variant="subtle" />
 </flux:main>
+
 
 
 @fluxScripts

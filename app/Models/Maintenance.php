@@ -53,9 +53,16 @@ class Maintenance extends Model
     public function parts()
     {
         return $this->belongsToMany(Part::class, 'maintenance_parts')
-            ->withPivot('quantity', 'unit_cost_at_time')
+            ->withPivot('id', 'quantity', 'unit_cost_at_time')
             ->withTimestamps();
     }
+
+    public function tasks() {
+        return $this->belongsToMany(Task::class, 'maintenance_tasks')
+            ->withPivot('status')
+            ->withTimestamps();
+    }
+
 
     public function getTotalCostAttribute(): float
     {
@@ -78,6 +85,7 @@ class Maintenance extends Model
             default       => ['color' => 'yellow', 'icon' => 'clock',        'label' => 'Pendente'],
         };
     }
+
 
 
 }

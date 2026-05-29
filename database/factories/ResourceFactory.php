@@ -20,9 +20,9 @@ class ResourceFactory extends Factory
         return [
             'name' => ucfirst(fake()->words(2, true)) . ' ' . strtoupper(fake()->bothify('??##')),
             'description' => fake()->sentence(),
-            'location' => 'Setor ' . $this->faker->bothify('#?'),
+            'location' => 'Setor ' . fake()->bothify('#?'),
             'section' => ucfirst(fake()->word()),
-            'status' => $this->faker->randomElement(['active', 'inactive'])
+            'status' => fake()->randomElement(['active', 'inactive'])
         ];
     }
 }

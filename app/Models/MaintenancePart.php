@@ -24,6 +24,11 @@ class MaintenancePart extends Model
         return $this->belongsTo(Maintenance::class);
     }
 
+    public function part()
+    {
+        return $this->belongsTo(Part::class);
+    }
+
     public function getTotalCostAttribute(): float
     {
         return $this->quantity * $this->unit_cost_at_time;
@@ -37,4 +42,5 @@ class MaintenancePart extends Model
             'maintenance_parts.*.quantity' => ['required', 'integer', 'min:1'],
         ];
     }
+
 }

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->boolean('is_active')->default(true);
             $table->date('started_at')->nullable();
-            $table->string('email_responsible')->nullable();
+            $table->string('email_responsible')->nullable();    #array
             $table->unsignedInteger('notification_days_before')->default(7);
             $table->timestamp('last_notified_at')->nullable();
             $table->timestamps();

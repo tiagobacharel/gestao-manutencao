@@ -14,7 +14,8 @@ class PlanPart extends Model
     protected $fillable = [
         'maintenance_plan_id',
         'part_id',
-        'quantity'
+        'plan_task_id',
+        'quantity',
     ];
 
     public function part(): BelongsTo

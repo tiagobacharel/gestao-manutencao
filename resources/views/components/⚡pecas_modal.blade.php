@@ -28,9 +28,12 @@ new class extends Component
         }
     }
 
+
     public function save()
     {
         $this->validate(Part::rules($this->part?->id));
+
+        $isNew = !$this->part->exists;
 
         $this->part->fill([
             'reference'         => $this->reference,
@@ -41,12 +44,34 @@ new class extends Component
         ]);
         $this->part->save();
 
+        if ($isNew) {
+            Flux::toast('A peça foi criada com sucesso!', variant: 'success', duration: 1000);
+
+            return $this->redirect(route('pecas.index'), navigate: true);
+        }
+
+        Flux::toast('A peça foi atualizado com sucesso!', variant: 'success', duration: 1000);
+
         return $this->fechar();
+
+
     }
 
     public function fechar()
     {
-        return $this->redirect(request()->header('Referer') ?? route('pecas.index'), navigate: true);
+        if(!$this->part->exists){
+            return $this->redirect(request()->header('Referer') ?? route('pecas.index'), navigate: true);
+        }
+
+        $this->part->refresh();
+
+        $this->name = $this->part->name;
+        $this->reference = $this->part->reference;
+        $this->description = $this->part->description ?? '';
+        $this->stock_current = $this->part->stock_current;
+        $this->current_unit_cost = $this->part->current_unit_cost;
+
+        $this->resetErrorBag();
     }
 };
 ?>
@@ -91,7 +116,7 @@ new class extends Component
                         icon="cube"
                     />
                     <flux:input
-                        label="Custo unitário (€)"
+                        label="Custo unitário (€) / Total: {{ number_format($part->stock_value, 2, ',', '.') }} €"
                         name="unit_cost"
                         wire:model.blur="current_unit_cost"
                         type="number"
@@ -100,7 +125,6 @@ new class extends Component
                         icon="currency-euro"
                     />
                 </div>
-
             </div>
 
             <div class="flex gap-2 w-full">
@@ -108,7 +132,7 @@ new class extends Component
                     {{ $part && $part->exists ? 'Atualizar' : 'Criar' }}
                 </flux:button>
                 <flux:button wire:click="fechar" type="button" variant="danger" class="w-full">
-                    Cancelar
+                    {{ $part && $part->exists ? 'Recarregar' : 'Cancelar' }}
                 </flux:button>
             </div>
 

@@ -16,8 +16,8 @@ class MaintenancePartFactory extends Factory
         return [
             'maintenance_id' => Maintenance::factory(),
             'part_id'     => Part::factory(),
-            'quantity'    => $this->faker->numberBetween(1, 10),
-            'unit_cost_at_time'   => $this->faker->randomFloat(2, 1, 500),
+            'quantity'    => fake()->numberBetween(1, 10),
+            'unit_cost_at_time'   => fake()->randomFloat(2, 1, 500),
         ];
     }
 }

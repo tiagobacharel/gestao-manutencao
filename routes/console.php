@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('maintenances:notify-upcoming')
-    ->dailyAt('08:02')
+    ->dailyAt('08:00')
     ->timezone('Europe/Lisbon')
     ->withoutOverlapping()
     ->runInBackground()

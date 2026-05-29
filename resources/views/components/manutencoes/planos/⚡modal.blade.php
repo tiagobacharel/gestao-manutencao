@@ -2,21 +2,22 @@
 
 use App\Models\MaintenancePlan;
 use App\Models\Resource;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 new class extends Component {
 
     public ?MaintenancePlan $plano = null;
 
-    public $resource_id          = '';
-    public string $name          = '';
+    public $resource_id = '';
+    public string $name = '';
     public string $interval_value = '1';
-    public string $interval_unit  = 'month';
-    public string $description   = '';
-    public bool $is_active       = true;
-    public string $started_at    = '';
-    public string $email_responsible          = '';
-    public string $notification_days_before   = '7';
+    public string $interval_unit = 'month';
+    public string $description = '';
+    public bool $is_active = true;
+    public string $started_at = '';
+    public string $email_responsible = '';
+    public string $notification_days_before = '7';
 
     public string $recurso_search = '';
     public bool $recurso_open = false;
@@ -24,24 +25,24 @@ new class extends Component {
 
     public function selectRecurso(int $id, string $nome): void
     {
-        $this->resource_id    = $id;
+        $this->resource_id = $id;
         $this->recurso_search = $nome;
-        $this->recurso_open   = false;
+        $this->recurso_open = false;
     }
 
     public function mount(?MaintenancePlan $plano = null): void
     {
         if ($plano && $plano->exists) {
-            $this->plano                      = $plano;
-            $this->resource_id                = $plano->resource_id;
-            $this->name                       = $plano->name;
-            $this->interval_value             = (string) $plano->interval_value;
-            $this->interval_unit              = $plano->interval_unit;
-            $this->description                = $plano->description ?? '';
-            $this->is_active                  = $plano->is_active;
-            $this->started_at                 = $plano->started_at?->format('Y-m-d') ?? '';
-            $this->email_responsible          = $plano->email_responsible ?? '';
-            $this->notification_days_before   = (string) $plano->notification_days_before;
+            $this->plano = $plano;
+            $this->resource_id = $plano->resource_id;
+            $this->name = $plano->name;
+            $this->interval_value = (string)$plano->interval_value;
+            $this->interval_unit = $plano->interval_unit;
+            $this->description = $plano->description ?? '';
+            $this->is_active = $plano->is_active;
+            $this->started_at = $plano->started_at?->format('Y-m-d') ?? '';
+            $this->email_responsible = $plano->email_responsible ?? '';
+            $this->notification_days_before = (string)$plano->notification_days_before;
 
             $this->recurso_search = $plano->resource->name ?? '';
         } else {
@@ -49,30 +50,49 @@ new class extends Component {
         }
     }
 
-    public function save(): void
+
+    #[On('salvar-tudo')]
+    public function save()
     {
         $this->validate(MaintenancePlan::rules());
 
+        $isNew = !$this->plano->exists;
+
         $this->plano->fill([
-            'resource_id'               => $this->resource_id,
-            'name'                      => $this->name,
-            'interval_value'            => $this->interval_value,
-            'interval_unit'             => $this->interval_unit,
-            'description'               => $this->description ?: null,
-            'is_active'                 => $this->is_active,
-            'started_at'                => $this->started_at ?: null,
-            'email_responsible'         => $this->email_responsible ?: null,
-            'notification_days_before'  => $this->notification_days_before,
+            'resource_id' => $this->resource_id,
+            'name' => $this->name,
+            'interval_value' => $this->interval_value,
+            'interval_unit' => $this->interval_unit,
+            'description' => $this->description ?: null,
+            'is_active' => $this->is_active,
+            'started_at' => $this->started_at ?: null,
+            'email_responsible' => $this->email_responsible ?: null,
+            'notification_days_before' => $this->notification_days_before,
         ]);
         $this->plano->save();
 
-        $this->dispatch('plano-saved');
+        if ($isNew) {
+            Flux::toast('O plano foi criada com sucesso!', variant: 'success', duration: 1000);
+
+            return $this->redirect(route('planos_manutencoes.index'), navigate: true);
+        }
+
+        Flux::toast(text: 'O plano foi atualizado com sucesso!', variant: 'success', duration: 1000);
+
         $this->fechar();
     }
 
-    public function fechar(): mixed
+    public function fechar()
     {
-        return $this->redirect(request()->header('Referer') ?? route('planos_manutencoes.index'), navigate: true);
+        if (!$this->plano->exists) {
+            return $this->redirect(request()->header('Referer') ?? route('planos_manutencoes.index'), navigate: true);
+        }
+
+        $this->plano->refresh();
+
+        $this->mount($this->plano);
+
+        $this->resetErrorBag();
     }
 
     public function with(): array
@@ -99,12 +119,9 @@ new class extends Component {
                 <flux:heading size="lg">
                     {{ $plano && $plano->exists ? 'Editar Plano' : 'Novo Plano de Manutenção' }}
                 </flux:heading>
-                <flux:text size="sm" class="text-zinc-400 mt-1">
-                    {{ $plano && $plano->exists ? "Plano #{$plano->id}" : 'Preenche os dados abaixo.' }}
-                </flux:text>
             </div>
 
-            <flux:separator variant="subtle" />
+            <flux:separator variant="subtle"/>
 
             <div class="space-y-4">
 
@@ -149,11 +166,12 @@ new class extends Component {
                         </ul>
                     </div>
 
-                    <flux:error name="resource_id" />
+                    <flux:error name="resource_id"/>
                 </div>
 
-                <flux:input label="Nome do plano" wire:model="name" placeholder="Ex: Manutenção trimestral" />
-                @error('name') <flux:error>{{ $message }}</flux:error> @enderror
+                <flux:input label="Nome do plano" wire:model="name" placeholder="Ex: Manutenção trimestral"/>
+                @error('name')
+                <flux:error>{{ $message }}</flux:error> @enderror
 
                 <flux:textarea
                     label="Descrição"
@@ -165,7 +183,8 @@ new class extends Component {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <!-- Bloco de Intervalo Composto -->
                     <div>
-                        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Intervalo de Repetição</label>
+                        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Intervalo de
+                            Repetição</label>
                         <div class="grid grid-cols-3 gap-2">
                             <!-- Valor Numérico -->
                             <div class="col-span-1">
@@ -185,8 +204,10 @@ new class extends Component {
                                 </flux:select>
                             </div>
                         </div>
-                        @error('interval_value') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
-                        @error('interval_unit') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                        @error('interval_value')
+                        <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                        @error('interval_unit')
+                        <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
                     </div>
 
                     <!-- Data de Início -->
@@ -197,7 +218,8 @@ new class extends Component {
                             type="date"
                             icon="calendar"
                         />
-                        @error('started_at') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                        @error('started_at')
+                        <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
                     </div>
                 </div>
 
@@ -218,10 +240,11 @@ new class extends Component {
                         min="0"
                         placeholder="Ex: 7"
                     />
-                    @error('notification_days_before') <flux:error>{{ $message }}</flux:error> @enderror
+                    @error('notification_days_before')
+                    <flux:error>{{ $message }}</flux:error> @enderror
                 </div>
 
-                <flux:checkbox wire:model="is_active" label="Plano ativo" />
+                <flux:checkbox wire:model="is_active" label="Plano ativo"/>
 
             </div>
 
@@ -230,7 +253,7 @@ new class extends Component {
                     {{ $plano && $plano->exists ? 'Atualizar' : 'Criar' }}
                 </flux:button>
                 <flux:button type="button" wire:click="fechar" variant="danger" class="w-full">
-                    Cancelar
+                    {{ $plano && $plano->exists ? 'Recarregar' : 'Cancelar' }}
                 </flux:button>
             </div>
 

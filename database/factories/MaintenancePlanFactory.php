@@ -6,6 +6,7 @@ use App\Models\MaintenancePlan;
 use App\Models\Resource;
 use App\Models\Part;
 use App\Models\PlanPart;
+use App\Models\Task;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class MaintenancePlanFactory extends Factory
@@ -14,7 +15,7 @@ class MaintenancePlanFactory extends Factory
 
     public function definition(): array
     {
-        $intervals = $this->faker->randomElement([
+        $intervals = fake()->randomElement([
             ['name' => 'Lubrificação Semanal', 'value' => 7, 'unit' => 'day'],
             ['name' => 'Limpeza Quinzenal', 'value' => 15, 'unit' => 'day'],
             ['name' => 'Manutenção Preventiva Mensal', 'value' => 1, 'unit' => 'month'],
@@ -29,9 +30,9 @@ class MaintenancePlanFactory extends Factory
             'name'          => $intervals['name'],
             'interval_value'=> $intervals['value'],
             'interval_unit' => $intervals['unit'],
-            'description'   => $this->faker->optional(0.7)->paragraph(),
-            'is_active'     => $this->faker->boolean(80),
-            'started_at'    => $this->faker->optional(0.8)->dateTimeBetween('-1 year', 'now')?->format('Y-m-d'),
+            'description'   => fake()->optional(0.7)->paragraph(),
+            'is_active'     => fake()->boolean(80),
+            'started_at'    => fake()->optional(0.8)->dateTimeBetween('-1 year', 'now')?->format('Y-m-d'),
         ];
     }
 
@@ -55,16 +56,39 @@ class MaintenancePlanFactory extends Factory
                     ? $parts->random()
                     : Part::factory()->create();
 
+                $randomPlanTask = fake()->boolean(70)
+                    ? \DB::table('plan_tasks')->where('maintenance_plan_id', $plan->id)->inRandomOrder()->first()
+                    : null;
+
                 PlanPart::updateOrCreate(
                     [
                         'maintenance_plan_id' => $plan->id,
                         'part_id'             => $part->id,
                     ],
                     [
-                        'quantity' => rand(1, 5),
+                        'quantity'     => rand(1, 5),
+                        'plan_task_id' => $randomPlanTask ? $randomPlanTask->id : null,
                     ]
                 );
             }
+        });
+    }
+
+
+    public function withPlanTasks(int $min = 1, int $max = 3, $tasks = null): self
+    {
+        return $this->afterCreating(function (\App\Models\MaintenancePlan $plan) use ($min, $max, $tasks) {
+            // Se não passarmos tarefas, vai buscar ou criar algumas
+            $tasksCollection = $tasks ?? Task::all();
+
+            if ($tasksCollection->isEmpty()) {
+                $tasksCollection = Task::factory(5)->create();
+            }
+
+            // Seleciona uma quantidade aleatória de tarefas e associa ao plano
+            $randomTasks = $tasksCollection->random(fake()->numberBetween($min, min($max, $tasksCollection->count())));
+
+            $plan->tasks()->attach($randomTasks);
         });
     }
 }

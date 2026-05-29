@@ -34,10 +34,6 @@ class NotifyUpcomingMaintenances extends Command
         $due = $plans->filter(function (MaintenancePlan $plan) use ($today): bool {
             $nextOccurrence = $this->getNextOccurrence($plan, $today);
 
-            if (! $nextOccurrence) {
-                return false;
-            }
-
             $notifyOn = $nextOccurrence->copy()->subDays($plan->notification_days_before);
 
             return $notifyOn->isSameDay($today);

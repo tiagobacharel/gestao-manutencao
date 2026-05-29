@@ -11,12 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('plan_parts', function (Blueprint $table) {
+        Schema::create('plan_tasks', function (Blueprint $table) {
             $table->id();
             $table->foreignId('maintenance_plan_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('part_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('plan_task_id')->nullable()->constrained()->nullOnDelete();
-            $table->unsignedInteger('quantity')->default(1);
+            $table->foreignId('task_id')->constrained()->cascadeOnDelete(); // ex: "Inspecionar travões"
             $table->timestamps();
         });
     }
@@ -26,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('plan_parts');
+        Schema::dropIfExists('plan_tasks');
     }
 };
