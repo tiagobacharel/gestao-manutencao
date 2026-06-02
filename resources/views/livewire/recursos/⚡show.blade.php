@@ -55,8 +55,7 @@ new class extends Component {
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex items-center gap-3">
                     <flux:button @click="history.back()" icon="arrow-left" variant="subtle" size="sm" />
-
-
+                    <flux:heading size="xl" level="1">{{ $recurso->name }}</flux:heading>
                 </div>
 
                 <div>
@@ -69,6 +68,7 @@ new class extends Component {
 
             <flux:separator variant="subtle" />
             <div>
+
                 <livewire:recursos.modal :recurso="$recurso" />
 
                 <flux:card class="space-y-4">

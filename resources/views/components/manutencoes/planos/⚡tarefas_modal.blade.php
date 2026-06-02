@@ -121,59 +121,93 @@ new class extends Component {
     #[On('salvar-tudo')]
     public function save(): void
     {
-        $this->validate(PlanTask::rules());
+        $this->validate(PlanTask::rules($this));
 
-        DB::transaction(function () {
-            // IDs de plan_tasks a manter
-            $keptPlanTaskIds = [];
+        // Variável para rastrear se houve qualquer alteração na base de dados
+        $hasChanges = DB::transaction(function () {
+            $now = now();
+            $formTasks = collect($this->plan_tasks)->filter(fn($t) => !empty($t['task_id']));
+            $taskIds = $formTasks->pluck('task_id')->all();
+            $changed = false;
 
-            foreach ($this->plan_tasks as $item) {
-                if (empty($item['task_id'])) continue;
+            // 1. Sincronizar Tarefas (PlanTask)
+            $existingTasks = PlanTask::where('maintenance_plan_id', $this->plano->id)->get()->keyBy('task_id');
+            $newTaskIds = array_diff($taskIds, $existingTasks->keys()->all());
 
-                // Upsert da plan_task
-                $planTask = PlanTask::firstOrCreate([
-                    'maintenance_plan_id' => $this->plano->id,
-                    'task_id' => $item['task_id'],
-                ]);
+            if (!empty($newTaskIds)) {
+                DB::table('plan_tasks')->insert(array_map(fn($id) => [
+                    'maintenance_plan_id' => $this->plano->id, 'task_id' => $id, 'created_at' => $now, 'updated_at' => $now
+                ], $newTaskIds));
 
-                $keptPlanTaskIds[] = $planTask->id;
+                $existingTasks = PlanTask::where('maintenance_plan_id', $this->plano->id)->get()->keyBy('task_id');
+                $changed = true;
+            }
 
-                // Apagar peças antigas desta plan_task
-                PlanPart::where('maintenance_plan_id', $this->plano->id)
-                    ->where('plan_task_id', $planTask->id)
-                    ->delete();
+            $keptTaskIds = $existingTasks->whereIn('task_id', $taskIds)->pluck('id')->all();
 
-                // Recriar peças
-                foreach ($item['parts'] as $part) {
-                    if (empty($part['part_id'])) continue;
+            // 2. Sincronizar Peças (PlanPart)
+            $existingParts = DB::table('plan_parts')->where('maintenance_plan_id', $this->plano->id)
+                ->whereIn('plan_task_id', $keptTaskIds)->get()->keyBy(fn($p) => "{$p->plan_task_id}-{$p->part_id}");
 
-                    PlanPart::create([
-                        'maintenance_plan_id' => $this->plano->id,
-                        'part_id' => $part['part_id'],
-                        'plan_task_id' => $planTask->id,
-                        'quantity' => $part['quantity'],
-                    ]);
+            $partsToInsert = [];
+            $keptPartKeys = [];
+
+            foreach ($formTasks as $item) {
+                $planTaskId = $existingTasks->get($item['task_id'])?->id;
+                if (!$planTaskId) continue;
+
+                foreach (collect($item['parts'])->filter(fn($p) => !empty($p['part_id'])) as $part) {
+                    $key = "{$planTaskId}-{$part['part_id']}";
+                    $keptPartKeys[] = $key;
+
+                    if ($existingParts->has($key)) {
+                        if ($existingParts->get($key)->quantity != $part['quantity']) {
+                            DB::table('plan_parts')->where('id', $existingParts->get($key)->id)
+                                ->update(['quantity' => $part['quantity'], 'updated_at' => $now]);
+                            $changed = true;
+                        }
+                    } else {
+                        $partsToInsert[] = [
+                            'maintenance_plan_id' => $this->plano->id, 'plan_task_id' => $planTaskId,
+                            'part_id' => $part['part_id'], 'quantity' => $part['quantity'], 'created_at' => $now, 'updated_at' => $now
+                        ];
+                    }
                 }
             }
 
-            // 1. Identificar as tarefas que vão ser eliminadas
-            $tasksToDelete = PlanTask::where('maintenance_plan_id', $this->plano->id)
-                ->whereNotIn('id', $keptPlanTaskIds)
-                ->pluck('id');
+            if (!empty($partsToInsert)) {
+                DB::table('plan_parts')->insert($partsToInsert);
+                $changed = true;
+            }
 
-            // 2. Apagar primeiro as peças associadas a essas tarefas específicas
-            PlanPart::where('maintenance_plan_id', $this->plano->id)
-                ->whereIn('plan_task_id', $tasksToDelete)
-                ->delete();
+            // 3. Limpar Peças e Tarefas removidas
+            $partsToDelete = $existingParts->filter(fn($p) => !in_array("{$p->plan_task_id}-{$p->part_id}", $keptPartKeys))->pluck('id');
+            if ($partsToDelete->isNotEmpty()) {
+                DB::table('plan_parts')->whereIn('id', $partsToDelete)->delete();
+                $changed = true;
+            }
 
-            // 3. Agora sim, apagar as tarefas em segurança
-            PlanTask::whereIn('id', $tasksToDelete)->delete();
+            $tasksToDelete = PlanTask::where('maintenance_plan_id', $this->plano->id)->whereNotIn('id', $keptTaskIds)->pluck('id');
+            if ($tasksToDelete->isNotEmpty()) {
+                DB::table('plan_parts')->where('maintenance_plan_id', $this->plano->id)->whereIn('plan_task_id', $tasksToDelete)->delete();
+                PlanTask::whereIn('id', $tasksToDelete)->delete();
+                $changed = true;
+            }
+
+            return $changed;
         });
 
-        Flux::toast(text: 'As tarefas foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+        // Exibe o toast com base na existência de alterações
+        if ($hasChanges) {
+            Flux::toast('As tarefas foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+        } else {
+            Flux::toast('As tarefas não tem alterações!', variant: 'danger', duration: 1000);
+        }
 
         $this->fechar();
     }
+
+
 
     public function fechar(): mixed
     {
@@ -184,7 +218,6 @@ new class extends Component {
             );
         }
 
-        $this->plano->refresh();
         $this->mount($this->plano);
         $this->resetErrorBag();
 
@@ -337,6 +370,7 @@ new class extends Component {
                                     placeholder="Pesquisar tarefa..."
                                     autocomplete="off"
                                     icon="magnifying-glass"
+                                    :invalid="$errors->has('plan_tasks.'.$index.'.task_id')"
                                 />
 
                                 @if($item['open'])
@@ -361,6 +395,10 @@ new class extends Component {
                                         @endif
                                     </ul>
                                 @endif
+
+                                @error("plan_tasks.$index.task_id")
+                                <flux:error class="mt-1">{{ $message }}</flux:error>
+                                @enderror
                             </div>
 
                             {{-- Botão acordeão + contador --}}
@@ -437,6 +475,7 @@ new class extends Component {
                                                 autocomplete="off"
                                                 icon="magnifying-glass"
                                                 size="sm"
+                                                :invalid="$errors->has('plan_tasks.'.$index.'.parts.'.$pi.'.part_id')"
                                             />
 
                                             @if($part['open'])
@@ -459,6 +498,10 @@ new class extends Component {
                                                     @endif
                                                 </ul>
                                             @endif
+
+                                            @error("plan_tasks.$index.parts.$pi.part_id")
+                                            <flux:error class="mt-1 text-xs">{{ $message }}</flux:error>
+                                            @enderror
                                         </div>
 
                                         {{-- Quantidade --}}

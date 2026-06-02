@@ -89,7 +89,7 @@
 
                     @forelse($campo['computedOptions'] as $id => $nome)
                         <li
-                            wire:click="{{ $campo['selectMethod'] }}({{ $id }}, '{{ addslashes($nome) }}')"
+                            wire:click="{{ $campo['selectMethod'] }}('{{ addslashes($id) }}', '{{ addslashes($nome) }}')"
                             @click="open = false"
                             class="cursor-pointer px-3 py-2 text-sm text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                         >

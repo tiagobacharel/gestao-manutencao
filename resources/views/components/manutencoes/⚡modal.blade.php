@@ -17,22 +17,40 @@ new class extends Component {
 
     public string $recurso_search = '';
     public bool $recurso_open = false;
+    public string $selected_recurso_name = '';
 
     public string $plano_search = '';
     public bool $plano_open = false;
+    public string $selected_plano_name = '';
 
+
+    public function updatedRecursoSearch($value): void
+    {
+        if ($value !== $this->selected_recurso_name) {
+            $this->resource_id = null;
+        }
+    }
 
     public function selectRecurso(int $id, string $nome): void
     {
         $this->resource_id = $id;
         $this->recurso_search = $nome;
+        $this->selected_recurso_name = $nome;
         $this->recurso_open = false;
+    }
+
+    public function updatedPlanoSearch($value): void
+    {
+        if ($value !== $this->selected_plano_name) {
+            $this->maintenance_plan_id = null;
+        }
     }
 
     public function selectPlano(int $id, string $nome): void
     {
         $this->maintenance_plan_id = $id;
         $this->plano_search = $nome;
+        $this->selected_plano_name = $nome;
         $this->plano_open = false;
     }
 
@@ -46,10 +64,16 @@ new class extends Component {
             $this->status = $manutencao->status;
             $this->notes = $manutencao->notes ?? '';
 
-            $this->recurso_search = $manutencao->resource->name ?? '';
 
-            $this->plano_search = $manutencao->plan->name ?? '';
+            if ($manutencao->resource) {
+                $this->recurso_search = $manutencao->resource->name;
+                $this->selected_recurso_name = $manutencao->resource->name;
+            }
 
+            if ($manutencao->plan) {
+                $this->plano_search = $manutencao->plan->name;
+                $this->selected_plano_name = $manutencao->plan->name;
+            }
 
         } else {
             $this->manutencao = new Maintenance();
@@ -57,35 +81,51 @@ new class extends Component {
     }
 
     #[On('salvar-tudo')]
-    public function save()
+    public function save(): mixed
     {
+        if (!empty($this->recurso_search) && empty($this->resource_id)) {
+            $this->addError('resource_id', 'Deve selecionar um recurso válido da lista.');
+            Flux::toast('Por favor, selecione um recurso válido.', variant: 'danger', duration: 1000,);
+            return null;
+        }
+
+        if (!empty($this->plano_search) && empty($this->maintenance_plan_id)) {
+            $this->addError('maintenance_plan_id', 'Deve selecionar um plano válido da lista.');
+            Flux::toast('Por favor, selecione um plano válido.', variant: 'danger', duration: 1000,);
+            return null;
+        }
+
         $this->validate(Maintenance::rules());
 
         $isNew = !$this->manutencao->exists;
 
         $this->manutencao->fill([
             'maintenance_plan_id' => $this->maintenance_plan_id ?: null,
-            'resource_id' => $this->resource_id,
-            'scheduled_at' => $this->scheduled_at ?: null,
-            'status' => $this->status,
-            'notes' => $this->notes ?: null,
-            /*
-              'created_by'          => $this->manutencao->exists
-                ? $this->manutencao->created_by
-                : auth()->id(),
-             */
+            'resource_id'         => $this->resource_id,
+            'scheduled_at'        => $this->scheduled_at ?: null,
+            'status'              => $this->status,
+            'notes'               => $this->notes ?: null,
         ]);
-        $this->manutencao->save();
 
-        if ($isNew) {
-            Flux::toast('A manutenção foi criada com sucesso!', variant: 'success', duration: 1000);
+        if ($this->manutencao->isDirty()) {
+            $this->manutencao->save();
 
-            return $this->redirect(route('manutencoes.index'), navigate: true);
+            Flux::toast(
+                $isNew ? 'A manutenção foi criada com sucesso!' : 'A manutenção foi atualizada com sucesso!',
+                variant: 'success',
+                duration: 1000,
+            );
+        } else {
+            Flux::toast(
+                'A manutenção não tem alterações!',
+                variant: 'danger',
+                duration: 1000,
+            );
         }
 
-        Flux::toast(text: 'A manutenção foi guardada com sucesso!', variant: 'success', duration: 1000);
-
-        $this->fechar();
+        return $isNew
+            ? $this->redirect(route('manutencoes.index'), navigate: true)
+            : $this->fechar();
     }
 
     public function fechar()
@@ -97,7 +137,6 @@ new class extends Component {
             );
         }
 
-        $this->manutencao->refresh();
         $this->mount($this->manutencao);
         $this->resetErrorBag();
 

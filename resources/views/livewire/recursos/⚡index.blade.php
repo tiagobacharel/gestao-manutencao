@@ -1,8 +1,7 @@
 <?php
-
-use App\Models\Resource;
-use Livewire\Volt\Component;
-use Livewire\WithPagination;
+    use App\Models\Resource;
+    use Livewire\Volt\Component;
+    use Livewire\WithPagination;
 
     new class extends Component {
         use WithPagination;
@@ -19,76 +18,102 @@ use Livewire\WithPagination;
             $view->layoutData(['title' => 'Recursos']);
         }
 
-        public array $locationOptions = [];
-        public array $sectionOptions = [];
+        public string $locationSearch = '';
+        public string $sectionSearch = '';
+
+        public function selectLocation(?string $id, ?string $label): void
+        {
+            $this->location = $label ?? '';
+            $this->locationSearch = $label ?? '';
+        }
+
+        public function selectSection(?string $id, ?string $label): void
+        {
+            $this->section = $label ?? '';
+            $this->sectionSearch = $label ?? '';
+        }
 
         public function mount(): void
         {
-            $this->locationOptions = Resource::distinct()
-                ->whereNotNull('location')
-                ->where('location', '!=', '')
-                ->pluck('location', 'location')
-                ->toArray();
+        }
 
-            $this->sectionOptions = Resource::distinct()
-                ->whereNotNull('section')
-                ->where('section', '!=', '')
-                ->pluck('section', 'section')
-                ->toArray();
+        public function updated($propertyName): void
+        {
+            if (in_array($propertyName, ['search', 'locationSearch', 'sectionSearch', 'status'])) {
+                $this->resetPage();
+            }
         }
 
         protected mixed $recursosCache = null;
 
         public function with(): array
         {
-            if ($this->recursosCache == null){
-                $this->recursosCache = Resource::query()
-                    ->when($this->search, fn($q) => $q->where('name', 'like', '%'.$this->search.'%'))
-                    ->when($this->status, fn($q) => $q->where('status', $this->status))
-                    ->when($this->location, fn($q) => $q->where('location', $this->location))
-                    ->when($this->section, fn($q) => $q->where('section', $this->section))
-                    ->latest()
-                    ->paginate(15);
-            }
+            $locationOptions = once(fn() => Resource::distinct()
+                ->whereNotNull('location')
+                ->where('location', '!=', '')
+                ->when($this->locationSearch, fn($q) => $q->where('location', 'like', '%'.$this->locationSearch.'%'))
+                ->limit(10)
+                ->pluck('location', 'location')
+                ->toArray());
+
+            $sectionOptions = once(fn() => Resource::distinct()
+                ->whereNotNull('section')
+                ->where('section', '!=', '')
+                ->when($this->sectionSearch, fn($q) => $q->where('section', 'like', '%'.$this->sectionSearch.'%'))
+                ->limit(10)
+                ->pluck('section', 'section')
+                ->toArray());
+
+            $recursos = once(fn() => Resource::query()
+                ->when($this->search, fn($q) => $q->where('name', 'like', '%'.$this->search.'%'))
+                ->when($this->status, fn($q) => $q->where('status', $this->status))
+                ->when($this->locationSearch, fn($q) => $q->where('location', 'like', '%'.$this->locationSearch.'%'))
+                ->when($this->sectionSearch, fn($q) => $q->where('section', 'like', '%'.$this->sectionSearch.'%'))
+                ->latest()
+                ->paginate(15));
+
             return [
                 'configFiltros' => [
                     [
-                        'type' => 'text',
-                        'model' => 'search',
+                        'type'        => 'text',
+                        'model'       => 'search',
                         'placeholder' => 'Procurar recursos...',
                     ],
                     [
-                        'type' => 'select',
-                        'model' => 'status',
-                        'label' => 'Todos os estados',
+                        'type'            => 'custom-dropdown',
+                        'model'           => 'location',
+                        'searchModel'     => 'locationSearch',
+                        'label'           => 'Localização',
+                        'selectMethod'    => 'selectLocation',
+                        'computedOptions' => $locationOptions,
+                    ],
+                    [
+                        'type'            => 'custom-dropdown',
+                        'model'           => 'section',
+                        'searchModel'     => 'sectionSearch',
+                        'label'           => 'Secção / Dept.',
+                        'selectMethod'    => 'selectSection',
+                        'computedOptions' => $sectionOptions,
+                    ],
+                    [
+                        'type'    => 'select',
+                        'model'   => 'status',
+                        'label'   => 'Todos os estados',
                         'options' => [
-                            'active' => 'Ativo',
+                            'active'   => 'Ativo',
                             'inactive' => 'Inativo',
                         ],
                     ],
-                    [
-                        'type' => 'select',
-                        'model' => 'location',
-                        'label' => 'Localização',
-                        'options' => $this->locationOptions,
-                    ],
-                    [
-                        'type' => 'select',
-                        'model' => 'section',
-                        'label' => 'Secção / Dept.',
-                        'icon' => 'building-office',
-                        'options' => $this->sectionOptions,
-                        ],
                 ],
 
                 'valoresAtuais' => [
-                    'search' => $this->search,
-                    'status' => $this->status,
-                    'location' => $this->location,
-                    'section'  => $this->section,
+                    'search'   => $this->search,
+                    'status'   => $this->status,
+                    'location' => $this->locationSearch,
+                    'section'  => $this->sectionSearch,
                 ],
 
-                'recursos' => $this->recursosCache,
+                'recursos' => $recursos,
             ];
         }
 
@@ -96,7 +121,7 @@ use Livewire\WithPagination;
 
         public function openModal() { $this->showModal = true; }
 
-};
+    };
 ?>
 
 <div class="space-y-6">

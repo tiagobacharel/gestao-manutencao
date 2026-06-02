@@ -12,71 +12,67 @@
 <body class="min-h-screen bg-white dark:bg-zinc-800 antialiased">
 
 @persist('toast')
-    <flux:toast.group position="top end" class="pt-6 pr-6 space-y-3" expanded>
-        <flux:toast class="!bg-slate-900 !text-white !rounded-xl !shadow-2xl !border !border-slate-800 !p-4 !backdrop-blur-md" />
-    </flux:toast.group>
+<flux:toast.group position="top end" class="pt-6 pr-6 space-y-3" expanded>
+    <flux:toast class="!bg-slate-900 !text-white !rounded-xl !shadow-2xl !border !border-slate-800 !p-4 !backdrop-blur-md" />
+</flux:toast.group>
 @endpersist
 
+<!-- Contentor Flexbox para alinhar a sidebar e o conteúdo principal lado a lado -->
+<div class="flex min-h-screen">
 
+    <!-- Sidebar fixa através de sticky e h-screen (evita que role com a página) -->
+    <flux:sidebar stashable class="sticky top-0 h-screen bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col">
 
-<flux:header container class="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
-    <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+        <flux:sidebar.toggle class="lg:hidden" icon="x-mark" inset="left" />
 
-    <flux:brand href="/" wire:navigate :logo="asset('imagens/yudo.png')" class="max-lg:hidden!"/>
+        <flux:brand href="/" wire:navigate :logo="asset('imagens/yudo.png')" class="px-2" />
 
-    <flux:navbar class="-mb-px max-lg:hidden">
-        <flux:navbar.item icon="home" href="/" wire:navigate>Home</flux:navbar.item>
-        <flux:navbar.item icon="calendar" href="/calendar" wire:navigate>Calendário</flux:navigate>
-        <flux:navbar.item icon="clipboard-document-check" href="/tarefas" wire:navigate>Tarefas</flux:navbar.item>
-        <flux:navbar.item icon="wrench" href="/manutencoes" wire:navigate>Manutenções</flux:navbar.item>
-        <flux:navbar.item icon="document-text" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:navbar.item>
-        <flux:navbar.item icon="inbox" href="/recursos" wire:navigate>Recursos</flux:navbar.item>
-        <flux:navbar.item icon="clipboard-document-list" href="/pecas" wire:navigate>Peças</flux:navbar.item>
-    </flux:navbar>
+        <!-- Lista de navegação com flex-1 e overflow-y-auto para garantir que todos os itens aparecem sempre -->
+        <flux:navlist class="mt-6 flex-1 overflow-y-auto min-h-0">
+            <flux:navlist.item icon="home" href="/" wire:navigate>Home</flux:navlist.item>
+            <flux:navlist.item icon="calendar" href="/calendar" wire:navigate>Calendário</flux:navlist.item>
+            <flux:navlist.item icon="clipboard-document-check" href="/tarefas" wire:navigate>Tarefas</flux:navlist.item>
+            <flux:navlist.item icon="wrench" href="/manutencoes" wire:navigate>Manutenções</flux:navlist.item>
+            <flux:navlist.item icon="document-text" href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:navlist.item>
+            <flux:navlist.item icon="inbox" href="/recursos" wire:navigate>Recursos</flux:navlist.item>
+            <flux:navlist.item icon="clipboard-document-list" href="/pecas" wire:navigate>Peças</flux:navlist.item>
+        </flux:navlist>
 
-    <flux:spacer />
+        <flux:spacer />
 
-    <flux:button
-        x-data
-        x-on:click="$flux.dark = !$flux.dark"
-        variant="subtle"
-        square
-        aria-label="Alternar tema"
-    >
+        <div class="px-2 py-4 border-t border-zinc-200 dark:border-zinc-700">
+            <flux:button
+                x-data
+                x-on:click="$flux.dark = !$flux.dark"
+                variant="subtle"
+                square
+                class="w-full justify-start gap-3"
+                aria-label="Alternar tema"
+            >
+                <div class="flex items-center gap-3">
+                    <div class="relative size-5">
+                        <flux:icon.sun class="hidden dark:block size-5 text-zinc-400 hover:text-zinc-200" />
+                        <flux:icon.moon class="block dark:hidden size-5 text-zinc-500 hover:text-zinc-700" />
+                    </div>
+                    <span class="text-sm font-medium dark:text-zinc-400 text-zinc-500">Alternar Tema</span>
+                </div>
+            </flux:button>
+        </div>
+    </flux:sidebar>
 
-        <flux:icon.sun class="hidden dark:block size-5 text-zinc-400 hover:text-zinc-200" />
-        <flux:icon.moon class="block dark:hidden size-5 text-zinc-500 hover:text-zinc-700" />
-    </flux:button>
-</flux:header>
+    <!-- Área do conteúdo principal (ocupa o espaço restante e centraliza corretamente com 'container') -->
+    <div class="flex-1 flex flex-col min-w-0">
 
-<flux:sidebar sticky collapsible="mobile" class="lg:hidden bg-zinc-50 dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700">
-    <flux:sidebar.header>
-        <flux:sidebar.brand href="/" wire:navigate :logo="asset('imagens/yudo.png')"/>
-        <flux:sidebar.collapse class="in-data-flux-sidebar-on-desktop:not-in-data-flux-sidebar-collapsed-desktop:-mr-2" />
-    </flux:sidebar.header>
+        <flux:header class="lg:hidden bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
+            <flux:sidebar.toggle icon="bars-2" inset="left" />
+        </flux:header>
 
-    <flux:sidebar.nav>
-        <flux:sidebar.item icon="home" href="/" wire:navigate>Home</flux:sidebar.item>
-        <flux:sidebar.item icon="calendar" href="/calendar" wire:navigate>Calendário</flux:sidebar.item>
-        <flux:sidebar.item icon="clipboard-document-check"  href="/tarefas" wire:navigate>Tarefas</flux:sidebar.item>
-        <flux:sidebar.item icon="wrench"  href="/manutencoes" wire:navigate>Manutenções</flux:sidebar.item>
-        <flux:sidebar.item icon="document-text"  href="/planos_manutencoes" wire:navigate>Planos de Manutenções</flux:sidebar.item>
-        <flux:sidebar.item icon="inbox"  href="/recursos" wire:navigate>Recursos</flux:sidebar.item>
-        <flux:sidebar.item icon="clipboard-document-list"  href="/pecas" wire:navigate>Peças</flux:sidebar.item>
-    </flux:sidebar.nav>
+        <flux:main container>
+            {{ $slot }}
+        </flux:main>
+    </div>
 
-    <flux:sidebar.spacer />
-</flux:sidebar>
-
-<flux:main container>
-    <flux:heading size="xl" level="1">
-        {{ $slot }}
-    </flux:heading>
-
-    <flux:separator variant="subtle" />
-</flux:main>
-
-
+</div>
 
 @fluxScripts
 </body>

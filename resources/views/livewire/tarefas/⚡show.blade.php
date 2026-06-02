@@ -34,6 +34,7 @@ new class extends Component {
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex items-center gap-3">
                 <flux:button @click="history.back()" icon="arrow-left" variant="subtle" size="sm" />
+                <flux:heading size="xl" level="1">{{ $task->name }}</flux:heading>
             </div>
 
             <flux:button

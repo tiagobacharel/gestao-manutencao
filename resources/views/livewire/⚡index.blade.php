@@ -34,7 +34,6 @@ new class extends Component {
         return once(function () {
             $ano = $this->ano;
 
-            // --- CONTAGENS ---
             $statusCounts = Maintenance::selectRaw("status, count(*) as total")
                 ->whereIn('status', ['done', 'in_progress'])
                 ->groupBy('status')
@@ -43,11 +42,10 @@ new class extends Component {
             $totalFeitas = $statusCounts->get('done', 0);
             $emProgresso = $statusCounts->get('in_progress', 0);
 
-            // --- CUSTO ANUAL E MENSAL: puro SQL, zero Parts em memória ---
             $custosAno = DB::table('maintenances')
                 ->join('maintenance_parts', 'maintenances.id', '=', 'maintenance_parts.maintenance_id')
                 ->where('maintenances.status', 'done')
-                ->whereRaw("strftime('%Y', maintenances.done_at) = cast(? as text)", [$ano])
+                ->whereRaw("YEAR(maintenances.done_at) = ?", [$ano])
                 ->selectRaw('
                 maintenances.id,
                 maintenances.done_at,
@@ -68,25 +66,22 @@ new class extends Component {
                 return [$mes => round($custo, 2)];
             });
 
-            // --- CUSTO TOTAL ACUMULADO ---
             $custoTotal = DB::table('maintenance_parts')
                 ->sum(DB::raw('quantity * unit_cost_at_time'));
 
-            // --- CUSTO POR ANO ---
             $custoPorAno = DB::table('maintenances')
                 ->join('maintenance_parts', 'maintenances.id', '=', 'maintenance_parts.maintenance_id')
                 ->where('maintenances.status', 'done')
                 ->whereNotNull('maintenances.done_at')
-                ->selectRaw("strftime('%Y', maintenances.done_at) as ano_grupo, SUM(maintenance_parts.quantity * maintenance_parts.unit_cost_at_time) as total")
+                ->selectRaw("YEAR(maintenances.done_at) as ano_grupo, SUM(maintenance_parts.quantity * maintenance_parts.unit_cost_at_time) as total")
                 ->groupBy('ano_grupo')
                 ->get()
                 ->pluck('total', 'ano_grupo')
                 ->sortKeys();
 
-            // --- RECENTES: só 5, com resource e plan ---
             $recentes = Maintenance::with(['resource', 'plan'])
                 ->where('status', 'done')
-                ->whereRaw("strftime('%Y', done_at) = cast(? as text)", [$ano])
+                ->whereRaw("YEAR(done_at) = ?", [$ano])
                 ->orderByDesc('done_at')
                 ->limit(5)
                 ->get()
@@ -95,7 +90,6 @@ new class extends Component {
                     return $m;
                 });
 
-            // --- PRÓXIMAS: só 4 manutenções reais ---
             $manutencoes = Maintenance::with(['resource', 'plan'])
                 ->whereIn('status', ['pending', 'in_progress'])
                 ->whereNotNull('scheduled_at')
@@ -103,7 +97,6 @@ new class extends Component {
                 ->limit(4)
                 ->get();
 
-            // --- PLANOS SEM MANUTENÇÃO PENDENTE: limit na query, não em PHP ---
             $planosVirtuais = MaintenancePlan::with('resource')
                 ->where('is_active', true)
                 ->whereNotExists(function ($query) {
@@ -112,7 +105,7 @@ new class extends Component {
                         ->whereColumn('maintenances.maintenance_plan_id', 'maintenance_plans.id')
                         ->whereIn('maintenances.status', ['pending', 'in_progress']);
                 })
-                ->limit(4) // <-- limit aqui, não depois de ->get()
+                ->limit(4)
                 ->get()
                 ->map(function (MaintenancePlan $plan) {
                     $proxima = $plan->started_at ? Carbon::parse($plan->started_at) : Carbon::now();
@@ -120,13 +113,13 @@ new class extends Component {
                         $proxima->add($plan->interval_value, $plan->interval_unit);
                     }
                     return (object)[
-                        'id'                  => null,
-                        'resource'            => $plan->resource,
-                        'plan'                => $plan,
-                        'status'              => 'planned',
-                        'scheduled_at'        => $proxima->toDateString(),
-                        'notes'               => $plan->description,
-                        'done_at'             => null,
+                        'id'           => null,
+                        'resource'     => $plan->resource,
+                        'plan'         => $plan,
+                        'status'       => 'planned',
+                        'scheduled_at' => $proxima->toDateString(),
+                        'notes'        => $plan->description,
+                        'done_at'      => null,
                     ];
                 });
 
@@ -262,7 +255,7 @@ new class extends Component {
                         </div>
 
                         {{-- Barras --}}
-                        <div class="flex items-end gap-1.5 h-44">
+                        <div class="flex items-end gap-0.5 sm:gap-1.5 h-44">
                             @foreach($custoMensal as $mes => $custo)
                                 @php
                                     $altura = $maxCusto > 0 ? round(($custo / $maxCusto) * 100) : 0;
@@ -303,7 +296,7 @@ new class extends Component {
                                         ></div>
                                     </div>
 
-                                    <span class="text-[10px] leading-none
+                                    <span class=" text-[8px] sm:text-[10px] leading-none
                                         @if($isAtual) font-bold text-blue-500 dark:text-blue-400
                                         @else text-zinc-400 dark:text-zinc-500
                                         @endif">

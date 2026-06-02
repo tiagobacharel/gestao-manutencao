@@ -6,29 +6,61 @@ use App\Models\PlanTask;
 use App\Models\Resource;
 use App\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\Rules\In;
 
 
 uses(RefreshDatabase::class);
 
 
-test('regras de validação do PlanTask', function () {
-    $rules = PlanTask::rules();
+test('regras de validação do PlanTask com cobertura total', function () {
+
+    $dbTask = (object) ['id' => 1, 'name' => 'Manutenção Preventiva'];
+    $dbPart = (object) ['id' => 10, 'name' => 'Filtro de Ar', 'reference' => 'REF-99'];
+
+    DB::shouldReceive('table')->with('tasks')->andReturnSelf();
+    DB::shouldReceive('table')->with('parts')->andReturnSelf();
+    DB::shouldReceive('whereIn')->andReturnSelf();
+
+    DB::shouldReceive('get')->andReturnValues([
+        collect([$dbTask]), // Para as tarefas
+        collect([$dbPart])  // Para as peças
+    ]);
+
+    $mockComponent = (object) [
+        'plan_tasks' => [
+            [
+                'task_id' => 1,
+                'search'  => 'Manutenção Preventiva',
+                'parts'   => [
+                    [
+                        'part_id'  => 10,
+                        'search'   => 'Filtro de Ar / REF-99',
+                        'quantity' => 2
+                    ]
+                ]
+            ]
+        ]
+    ];
+
+    $rules = PlanTask::rules($mockComponent);
 
     expect($rules)->toHaveKeys([
+        'plan_tasks',
         'plan_tasks.*.task_id',
+        'plan_tasks.*.parts',
         'plan_tasks.*.parts.*.part_id',
         'plan_tasks.*.parts.*.quantity',
     ])
         ->and($rules['plan_tasks.*.task_id'])->toContain('required')
-        ->and($rules['plan_tasks.*.task_id'])->toContain('exists:tasks,id')
-
+        ->and($rules['plan_tasks.*.task_id'][1])->toBeInstanceOf(In::class)
         ->and($rules['plan_tasks.*.parts.*.part_id'])->toContain('required')
-        ->and($rules['plan_tasks.*.parts.*.part_id'])->toContain('exists:parts,id')
-
-        ->and($rules['plan_tasks.*.parts.*.quantity'])->toContain('required')
-        ->and($rules['plan_tasks.*.parts.*.quantity'])->toContain('integer')
-        ->and($rules['plan_tasks.*.parts.*.quantity'])->toContain('min:1');
+        ->and($rules['plan_tasks.*.parts.*.part_id'][1])->toBeInstanceOf(In::class)
+        ->and($rules['plan_tasks.*.parts.*.quantity'])
+        ->toContain('required')
+        ->toContain('integer')
+        ->toContain('min:1');
 });
+
 
 
 test('relações', function () {

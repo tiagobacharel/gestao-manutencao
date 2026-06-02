@@ -8,6 +8,7 @@ use Livewire\Component;
 new class extends Component {
 
     public ?MaintenancePlan $plano = null;
+    public bool $recurso_open = false;
 
     public $resource_id = '';
     public string $name = '';
@@ -20,15 +21,7 @@ new class extends Component {
     public string $notification_days_before = '7';
 
     public string $recurso_search = '';
-    public bool $recurso_open = false;
-
-
-    public function selectRecurso(int $id, string $nome): void
-    {
-        $this->resource_id = $id;
-        $this->recurso_search = $nome;
-        $this->recurso_open = false;
-    }
+    public string $selected_recurso_name = '';
 
     public function mount(?MaintenancePlan $plano = null): void
     {
@@ -36,50 +29,83 @@ new class extends Component {
             $this->plano = $plano;
             $this->resource_id = $plano->resource_id;
             $this->name = $plano->name;
-            $this->interval_value = (string)$plano->interval_value;
+            $this->interval_value = (string) $plano->interval_value;
             $this->interval_unit = $plano->interval_unit;
             $this->description = $plano->description ?? '';
             $this->is_active = $plano->is_active;
             $this->started_at = $plano->started_at?->format('Y-m-d') ?? '';
             $this->email_responsible = $plano->email_responsible ?? '';
-            $this->notification_days_before = (string)$plano->notification_days_before;
+            $this->notification_days_before = (string) $plano->notification_days_before;
 
-            $this->recurso_search = $plano->resource->name ?? '';
+            if ($plano->resource) {
+                $this->recurso_search = $plano->resource->name;
+                $this->selected_recurso_name = $plano->resource->name;
+            }
         } else {
             $this->plano = new MaintenancePlan();
         }
     }
 
+    public function updatedRecursoSearch($value): void
+    {
+        if ($value !== $this->selected_recurso_name) {
+            $this->resource_id = null;
+        }
+    }
+
+    public function selectRecurso(int $id, string $nome): void
+    {
+        $this->resource_id = $id;
+        $this->recurso_search = $nome;
+        $this->selected_recurso_name = $nome;
+        $this->recurso_open = false;
+
+        $this->resetValidation('resource_id');
+    }
 
     #[On('salvar-tudo')]
-    public function save()
+    public function save(): mixed
     {
-        $this->validate(MaintenancePlan::rules());
+        if (!empty($this->recurso_search) && empty($this->resource_id)) {
+            $this->addError('resource_id', 'Deve selecionar um recurso válido da lista.');
+            Flux::toast('Por favor, selecione um recurso válido.', variant: 'danger', duration: 1000,);
+            return null;
+        }
 
+        $this->validate(MaintenancePlan::rules());
         $isNew = !$this->plano->exists;
 
         $this->plano->fill([
-            'resource_id' => $this->resource_id,
-            'name' => $this->name,
-            'interval_value' => $this->interval_value,
-            'interval_unit' => $this->interval_unit,
-            'description' => $this->description ?: null,
-            'is_active' => $this->is_active,
-            'started_at' => $this->started_at ?: null,
-            'email_responsible' => $this->email_responsible ?: null,
+            'resource_id'              => $this->resource_id,
+            'name'                     => $this->name,
+            'interval_value'           => $this->interval_value,
+            'interval_unit'            => $this->interval_unit,
+            'description'              => $this->description ?: null,
+            'is_active'                => $this->is_active,
+            'started_at'               => $this->started_at ?: null,
+            'email_responsible'        => $this->email_responsible ?: null,
             'notification_days_before' => $this->notification_days_before,
         ]);
-        $this->plano->save();
 
-        if ($isNew) {
-            Flux::toast('O plano foi criada com sucesso!', variant: 'success', duration: 1000);
+        if ($this->plano->isDirty()) {
+            $this->plano->save();
 
-            return $this->redirect(route('planos_manutencoes.index'), navigate: true);
+            Flux::toast(
+                $isNew ? 'O plano foi criado com sucesso!' : 'O plano foi atualizado com sucesso!',
+                variant: 'success',
+                duration: 1000,
+            );
+        } else {
+            Flux::toast(
+                'O plano não tem alterações!',
+                variant: 'danger',
+                duration: 1000,
+            );
         }
 
-        Flux::toast(text: 'O plano foi atualizado com sucesso!', variant: 'success', duration: 1000);
-
-        $this->fechar();
+        return $isNew
+            ? $this->redirect(route('planos_manutencoes.index'), navigate: true)
+            : $this->fechar();
     }
 
     public function fechar()
@@ -88,10 +114,8 @@ new class extends Component {
             return $this->redirect(request()->header('Referer') ?? route('planos_manutencoes.index'), navigate: true);
         }
 
-        $this->plano->refresh();
 
         $this->mount($this->plano);
-
         $this->resetErrorBag();
     }
 
@@ -108,8 +132,8 @@ new class extends Component {
         ];
     }
 };
-?>
 
+?>
 
 <div>
     <form wire:submit="save">

@@ -25,7 +25,7 @@ Volt::route('/tarefas', 'tarefas.⚡index')->name('tarefas.index');
 Volt::route('/tarefas/{task}', 'tarefas.⚡show')->name('tarefas.show');
 
 
-Volt::route('/calendar', '⚡calendar')->name('recursos.calendar');;
+Volt::route('/calendar', '⚡calendar')->name('recursos.calendar');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');

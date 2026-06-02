@@ -29,9 +29,9 @@ new class extends Component
     }
 
 
-    public function save()
+    public function save(): mixed
     {
-        $this->validate(Part::rules($this->part?->id));
+        $this->validate(Part::rules($this->part->id));
 
         $isNew = !$this->part->exists;
 
@@ -42,19 +42,25 @@ new class extends Component
             'stock_current'     => $this->stock_current,
             'current_unit_cost' => $this->current_unit_cost,
         ]);
-        $this->part->save();
 
-        if ($isNew) {
-            Flux::toast('A peça foi criada com sucesso!', variant: 'success', duration: 1000);
-
-            return $this->redirect(route('pecas.index'), navigate: true);
+        if ($this->part->isDirty()) {
+            $this->part->save();
+            Flux::toast(
+                $isNew ? 'A peça foi criada com sucesso!' : 'A peça foi atualizada com sucesso!',
+                variant: 'success',
+                duration: 1000,
+            );
+        }else{
+            Flux::toast(
+                'A peça não tem alterações!',
+                variant: 'danger',
+                duration: 1000,
+            );
         }
 
-        Flux::toast('A peça foi atualizado com sucesso!', variant: 'success', duration: 1000);
-
-        return $this->fechar();
-
-
+        return $isNew
+            ? $this->redirect(route('pecas.index'), navigate: true)
+            : $this->fechar();
     }
 
     public function fechar()
@@ -63,7 +69,6 @@ new class extends Component
             return $this->redirect(request()->header('Referer') ?? route('pecas.index'), navigate: true);
         }
 
-        $this->part->refresh();
 
         $this->name = $this->part->name;
         $this->reference = $this->part->reference;

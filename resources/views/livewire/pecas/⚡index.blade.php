@@ -1,77 +1,75 @@
 <?php
+    use App\Models\Part;
+    use Livewire\Volt\Component;
+    use Livewire\WithPagination;
 
-use App\Models\Part;
-use Livewire\Volt\Component;
-use Livewire\WithPagination;
+    new class extends Component {
+        use WithPagination;
 
-new class extends Component {
-    use WithPagination;
+        public string $search = '';
+        public string $sortBy = 'created_at';
+        public string $sortDir = 'desc';
 
-    public string $search = '';
-    public string $sortBy = 'created_at';
-    public string $sortDir = 'desc';
-
-    public function rendering($view): void
-    {
-        $view->layoutData(['title' => 'Peças']);
-    }
-
-    public function updated($propertyName): void
-    {
-        if (in_array($propertyName, ['search'])) {
-            $this->resetPage();
-        }
-    }
-
-    public function sort(string $column): void
-    {
-        if ($this->sortBy === $column) {
-            $this->sortDir = $this->sortDir === 'asc' ? 'desc' : 'asc';
-        } else {
-            $this->sortBy = $column;
-            $this->sortDir = 'asc';
-        }
-    }
-
-    protected mixed $partsCache = null;
-
-    public function with(): array
-    {
-        if ($this->partsCache == null) {
-            $this->partsCache = Part::query()
-                ->when($this->search, fn($q) => $q->where(fn($sub) => $sub
-                    ->where('name', 'like', "%{$this->search}%")
-                    ->orWhere('reference', 'like', "%{$this->search}%")
-                    ->orWhere('description', 'like', "%{$this->search}%")
-                ))
-                ->orderBy($this->sortBy, $this->sortDir)
-                ->paginate(13);
+        public function rendering($view): void
+        {
+            $view->layoutData(['title' => 'Peças']);
         }
 
-        return [
-            'configFiltros' => [
-                [
-                    'type' => 'text',
-                    'model' => 'search',
-                    'placeholder' => 'Procurar peças...',
+        public function updated($propertyName): void
+        {
+            if (in_array($propertyName, ['search'])) {
+                $this->resetPage();
+            }
+        }
+
+        public function sort(string $column): void
+        {
+            if ($this->sortBy === $column) {
+                $this->sortDir = $this->sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                $this->sortBy = $column;
+                $this->sortDir = 'asc';
+            }
+        }
+
+        protected mixed $partsCache = null;
+
+        public function with(): array
+        {
+            if ($this->partsCache == null) {
+                $this->partsCache = Part::query()
+                    ->when($this->search, fn($q) => $q->where(fn($sub) => $sub
+                        ->where('name', 'like', "%{$this->search}%")
+                        ->orWhere('reference', 'like', "%{$this->search}%")
+                        ->orWhere('description', 'like', "%{$this->search}%")
+                    ))
+                    ->orderBy($this->sortBy, $this->sortDir)
+                    ->paginate(13);
+            }
+
+            return [
+                'configFiltros' => [
+                    [
+                        'type' => 'text',
+                        'model' => 'search',
+                        'placeholder' => 'Procurar peças...',
+                    ],
                 ],
-            ],
 
-            'valoresAtuais' => [
-                'search' => $this->search,
-            ],
+                'valoresAtuais' => [
+                    'search' => $this->search,
+                ],
 
-            'parts' => $this->partsCache,
+                'parts' => $this->partsCache,
+            ];
+        }
 
+        public bool $showModal = false;
 
-        ];
-    }
-
-    public bool $showModal = false;
-
-    public function openModal() { $this->showModal = true; }
-};
+        public function openModal() { $this->showModal = true; }
+    };
 ?>
+
 <div>
     <flux:main container class="space-y-6">
 

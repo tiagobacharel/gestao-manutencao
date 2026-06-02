@@ -23,7 +23,7 @@ new class extends Component
 
     public function save(): mixed
     {
-        $this->validate(Task::rules($this->task?->id));
+        $this->validate(Task::rules($this->task->id));
 
         $isNew = !$this->task->exists;
 
@@ -31,17 +31,25 @@ new class extends Component
             'name'        => $this->name,
             'description' => $this->description ?: null,
         ]);
-        $this->task->save();
 
-        if ($isNew) {
-            Flux::toast('A tarefa foi criada com sucesso!', variant: 'success', duration: 1000);
-
-            return $this->redirect(route('tarefas.index'), navigate: true);
+        if ($this->task->isDirty()) {
+            $this->task->save();
+            Flux::toast(
+                $isNew ? 'A tarefa foi criada com sucesso!' : 'A tarefa foi atualizada com sucesso!',
+                variant: 'success',
+                duration: 1000,
+            );
+        }else{
+            Flux::toast(
+                'A tarefa não tem alterações!',
+                variant: 'danger',
+                duration: 1000,
+            );
         }
 
-        Flux::toast('A tarefa foi atualizado com sucesso!', variant: 'success', duration: 1000);
-
-        return $this->fechar();
+        return $isNew
+            ? $this->redirect(route('tarefas.index'), navigate: true)
+            : $this->fechar();
     }
 
     public function fechar(): mixed
@@ -50,7 +58,6 @@ new class extends Component
             return $this->redirect(request()->header('Referer') ?? route('tasks.index'), navigate: true);
         }
 
-        $this->task->refresh();
 
         $this->name        = $this->task->name;
         $this->description = $this->task->description ?? '';

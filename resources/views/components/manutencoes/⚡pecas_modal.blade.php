@@ -63,56 +63,77 @@
         #[On('salvar-tudo')]
         public function save(): void
         {
-            $this->validate(MaintenancePart::rules());
+            // 1. Validação centralizada e nativa
+            $this->validate(MaintenancePart::rules($this));
 
-            DB::transaction(function () {
-                $formPartIds = [];
+            // 2. Transação que processa atualizações, inserções e remoções, retornando se houve mudanças
+            $hasChanges = DB::transaction(function () {
+                $now = now();
+                $formParts = collect($this->maintenance_parts)->filter(fn($p) => !empty($p['part_id']));
+                $formPartIds = $formParts->pluck('part_id')->all();
 
-                // Processar cada peça vinda do formulário individualmente
-                foreach ($this->maintenance_parts as $item) {
-                    if (empty($item['part_id'])) continue;
+                $existingParts = DB::table('maintenance_parts')
+                    ->where('maintenance_id', $this->manutencao->id)
+                    ->whereNull('maintenance_task_id')->get()->keyBy('part_id');
 
-                    $formPartIds[] = $item['part_id'];
+                $inserts = [];
+                $changed = false;
 
-                    // Procura se já existe esta peça gravada ESPECIFICAMENTE sem tarefa
-                    $pivotRow = $this->manutencao->parts()
-                        ->wherePivot('part_id', $item['part_id'])
-                        ->wherePivot('maintenance_task_id', null)
-                        ->first();
+                // Processa atualizações e novos registos
+                foreach ($formParts as $item) {
+                    $partId = $item['part_id'];
+                    $quantity = $item['quantity'];
 
-                    if ($pivotRow) {
-                        // Se já existe sem tarefa, atualiza apenas esta linha específica usando o ID da pivot
-                        DB::table('maintenance_parts')
-                            ->where('id', $pivotRow->pivot->id)
-                            ->update([
-                                'quantity' => $item['quantity'],
-                                'unit_cost_at_time' => $item['unit_cost_at_time'] ?? 0.00,
-                                'updated_at' => now(),
-                            ]);
+                    if ($existingParts->has($partId)) {
+                        $existing = $existingParts->get($partId);
+                        if ($existing->quantity != $quantity) {
+                            DB::table('maintenance_parts')->where('id', $existing->id)
+                                ->update(['quantity' => $quantity, 'updated_at' => $now]);
+                            $changed = true;
+                        }
                     } else {
-                        // Se não existe, insere um novo registo limpo sem tarefa
-                        $this->manutencao->parts()->attach($item['part_id'], [
+                        $inserts[] = [
+                            'maintenance_id'      => $this->manutencao->id,
                             'maintenance_task_id' => null,
-                            'quantity' => $item['quantity'],
-                            'unit_cost_at_time' => $item['unit_cost_at_time'] ?? 0.00,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
+                            'part_id'             => $partId,
+                            'quantity'            => $quantity,
+                            'unit_cost_at_time'   => $item['unit_cost_at_time'] ?? 0.00,
+                            'created_at'          => $now,
+                            'updated_at'          => $now
+                        ];
                     }
                 }
 
-                // Apagar apenas os registos sem tarefa que foram removidos do formulário
-                $this->manutencao->parts()
-                    ->wherePivot('maintenance_task_id', null)
-                    ->wherePivotNotIn('part_id', $formPartIds)
-                    ->detach();
+                // Executa inserções pendentes
+                if (!empty($inserts)) {
+                    DB::table('maintenance_parts')->insert($inserts);
+                    $changed = true;
+                }
+
+                // Remove as peças que deixaram de constar no formulário
+                $deleteQuery = DB::table('maintenance_parts')
+                    ->where('maintenance_id', $this->manutencao->id)
+                    ->whereNull('maintenance_task_id')
+                    ->whereNotIn('part_id', $formPartIds);
+
+                if ($deleteQuery->exists()) {
+                    $deleteQuery->delete();
+                    $changed = true;
+                }
+
+                return $changed;
             });
 
-
-            Flux::toast('As peças foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+            // 3. Feedback visual com base nas alterações detetadas
+            if ($hasChanges) {
+                Flux::toast('As peças foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+            } else {
+                Flux::toast('As peças não tem alterações!', variant: 'danger', duration: 1000);
+            }
 
             $this->fechar();
         }
+
 
 
         public function fechar()
@@ -121,7 +142,6 @@
                 return $this->redirect(request()->header('Referer') ?? route('manutencoes.index'), navigate: true);
             }
 
-            $this->manutencao->refresh();
 
             $this->mount($this->manutencao);
 
@@ -228,11 +248,12 @@
                                             wire:focus="$set('maintenance_parts.{{ $index }}.open', true)"
                                             @focus="localOpen = true"
                                             @click="localOpen = true"
-                                            @touchstart.passive="localOpen = true; $wire.set('maintenance_parts.{{ $index }}.open', true)"
-                                            @keydown.escape="localOpen = false; $wire.set('maintenance_parts.{{ $index }}.open', false)"
+                                            @touchstart.passive="localOpen = true"
+                                            @keydown.escape="localOpen = false"
                                             placeholder="Pesquisar nome / referencia"
                                             autocomplete="off"
                                             icon="magnifying-glass"
+                                            :invalid="$errors->has('maintenance_parts.'.$index.'.part_id')"
                                         />
                                     </flux:field>
 
@@ -284,7 +305,7 @@
                         {{-- COMPUTADOR --}}
                         <div class="hidden md:flex md:gap-2 md:items-start md:w-full md:mb-3">
 
-                            <div class="md:flex-1 relative" x-data="{ localOpen: false }" x-on:click.outside="localOpen = false; $wire.set('maintenance_parts.{{ $index }}.open', false)">
+                            <div class="md:flex-1 relative" x-data="{ localOpen: false }" x-on:click.outside="localOpen = false">
                                 <flux:field>
                                     @if($index === 0) <flux:label class="mb-1.5 block">Peça</flux:label> @endif
                                     <flux:input
@@ -292,10 +313,11 @@
                                         wire:focus="$set('maintenance_parts.{{ $index }}.open', true)"
                                         @focus="localOpen = true"
                                         @click="localOpen = true"
-                                        @keydown.escape="localOpen = false; $wire.set('maintenance_parts.{{ $index }}.open', false)"
+                                        @keydown.escape="localOpen = false"
                                         placeholder="Pesquisar nome / referencia"
                                         autocomplete="off"
                                         icon="magnifying-glass"
+                                        :invalid="$errors->has('maintenance_parts.'.$index.'.part_id')"
                                     />
                                 </flux:field>
 

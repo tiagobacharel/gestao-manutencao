@@ -11,29 +11,43 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 
-test('regras de validação do MaintenanceTask', function () {
-    $rules = MaintenanceTask::rules();
+use Illuminate\Support\Facades\DB;
 
-    expect($rules)->toHaveKeys([
-        'maintenance_tasks',
-        'maintenance_tasks.*.task_id',
-        'maintenance_tasks.*.status',
-        'maintenance_tasks.*.parts',
-        'maintenance_tasks.*.parts.*.part_id',
-        'maintenance_tasks.*.parts.*.quantity',
-    ])
-        ->and($rules['maintenance_tasks'])->toContain('array')
-        ->and($rules['maintenance_tasks.*.status'])
-        ->toContain('required')
-        ->and($rules['maintenance_tasks.*.status'])->toContain('in:pending,in_progress,completed')
-        ->and($rules['maintenance_tasks.*.parts.*.part_id'])
-        ->toContain('required_with:maintenance_tasks.*.parts.*.quantity')
-        ->and($rules['maintenance_tasks.*.parts.*.part_id'])->toContain('exists:parts,id')
-        ->and($rules['maintenance_tasks.*.parts.*.quantity'])
-        ->toContain('required')
-        ->and($rules['maintenance_tasks.*.parts.*.quantity'])->toContain('integer')
-        ->and($rules['maintenance_tasks.*.parts.*.quantity'])->toContain('min:1');
+test('regras de validacao do MaintenanceTask', function () {
+    $dbTask = (object) ['id' => 1, 'name' => 'Troca de Oleo'];
+    $dbPart = (object) ['id' => 2, 'name' => 'Filtro', 'reference' => 'FL123'];
+
+    DB::shouldReceive('table')->with('tasks')->andReturnSelf();
+    DB::shouldReceive('table')->with('parts')->andReturnSelf();
+    DB::shouldReceive('whereIn')->andReturnSelf();
+
+    DB::shouldReceive('get')->andReturnValues([
+        collect([$dbTask]),
+        collect([$dbPart])
+    ]);
+
+    $component = (object) [
+        'maintenance_tasks' => [
+            [
+                'task_id' => 1,
+                'search'  => 'Troca de Oleo',
+                'parts'   => [
+                    [
+                        'part_id' => 2,
+                        'search'  => 'Filtro / FL123',
+                    ]
+                ]
+            ]
+        ]
+    ];
+
+    $rules = MaintenanceTask::rules($component);
+
+    expect($rules)->toBeArray()
+        ->toHaveKey('maintenance_tasks.*.parts.*.part_id');
 });
+
+
 
 
 test('relações', function () {

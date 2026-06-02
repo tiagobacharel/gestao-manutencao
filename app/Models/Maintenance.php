@@ -22,8 +22,8 @@ class Maintenance extends Model
     protected function rules(): array
     {
         return [
-            'maintenance_plan_id' => ['nullable', 'exists:maintenance_plans,id'],
-            'resource_id'         => ['required', 'exists:resources,id'],
+            'maintenance_plan_id' => ['nullable', 'integer'],
+            'resource_id'         => ['required', 'integer'],
             'scheduled_at'        => ['nullable', 'date'],
             'status'              => ['required', 'in:pending,in_progress,done,cancelled'],
             'notes'               => ['nullable', 'string'],

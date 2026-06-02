@@ -55,7 +55,7 @@ new class extends Component
     }
 
 
-    public function save()
+    public function save(): mixed
     {
         $this->validate(
             array_merge(
@@ -72,35 +72,46 @@ new class extends Component
             'location'    => $this->location,
             'section'     => $this->section,
             'status'      => $this->status,
-        ]);
-        $this->recurso->save();
+        ])->save();
 
+        if ($this->recurso->isDirty() || !empty($this->photos)) {
 
-        foreach ($this->photos as $photo) {
-            $path = $photo->store("resources/{$this->recurso->id}", 'public');
-            $this->recurso->photos()->create(['path' => $path, 'disk' => 'public']);
+            $this->recurso->save();
+
+            foreach ($this->photos as $photo) {
+                $path = $photo->store("resources/{$this->recurso->id}", 'public');
+                $this->recurso->photos()->create(['path' => $path, 'disk' => 'public']);
+            }
+
+            $this->existingPhotos = $this->recurso->photos()->get()->toArray();
+
+            $this->photos = [];
+
+            Flux::toast(
+                $isNew ? 'O recurso foi criado com sucesso!' : 'O recurso foi atualizado com sucesso!',
+                variant: 'success',
+                duration: 1000,
+            );
+        }else{
+            Flux::toast(
+                'O recurso não tem alterações!',
+                variant: 'danger',
+                duration: 1000,
+            );
         }
 
 
-        if ($isNew) {
-            Flux::toast('O recurso foi criada com sucesso!', variant: 'success', duration: 1000);
-
-            return $this->redirect(route('recursos.index'), navigate: true);
-        }
-
-        Flux::toast('O recurso foi atualizado com sucesso!', variant: 'success', duration: 1000);
-
-        return $this->fechar();
-
+        return $isNew
+            ? $this->redirect(route('recursos.index'), navigate: true)
+            : $this->fechar();
     }
 
     public function fechar()
     {
         if (!$this->recurso->exists){
-            return $this->redirect(request()->header('Referer'?? route('recursos.index')), navigate: true);
+            return $this->redirect(request()->header('Referer') ?? route('recursos.index'), navigate: true);
         }
 
-        $this->recurso->refresh();
 
         $this->name = $this->recurso->name;
         $this->description = $this->recurso->description;
@@ -198,7 +209,6 @@ new class extends Component
                 @error('photos.*')
                 <flux:error>{{ $message }}</flux:error>
                 @enderror
-            </div>
             <div class="flex gap-2 w-full">
                 <flux:button type="submit" variant="primary" class="w-full">
                     {{ $recurso && $recurso->exists ? 'Atualizar' : 'Criar' }}

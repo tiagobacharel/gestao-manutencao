@@ -61,57 +61,69 @@
             $this->plan_parts = array_values($this->plan_parts);
         }
 
+
         #[On('salvar-tudo')]
         public function save(): void
         {
-            $this->validate(PlanPart::rules());
+            $this->validate(PlanPart::rules($this));
 
-            DB::transaction(function () {
-                $formPartIds = [];
+            $hasChanges = DB::transaction(function () {
+                $now = now();
+                $formParts = collect($this->plan_parts)->filter(fn($p) => !empty($p['part_id']));
+                $formPartIds = $formParts->pluck('part_id')->all();
 
-                // Processar cada peça vinda do formulário individualmente
-                foreach ($this->plan_parts as $item) {
-                    if (empty($item['part_id'])) continue;
+                $existingParts = DB::table('plan_parts')
+                    ->where('maintenance_plan_id', $this->plano->id)
+                    ->whereNull('plan_task_id')->get()->keyBy('part_id');
 
-                    $formPartIds[] = $item['part_id'];
+                $inserts = [];
+                $changed = false;
 
-                    // Procura se já existe esta peça gravada ESPECIFICAMENTE sem tarefa
-                    $pivotRow = $this->plano->parts()
-                        ->wherePivot('part_id', $item['part_id'])
-                        ->wherePivot('plan_task_id', null)
-                        ->first();
+                foreach ($formParts as $item) {
+                    $partId = $item['part_id'];
+                    $quantity = $item['quantity'];
 
-                    if ($pivotRow) {
-                        // Se já existe sem tarefa, atualiza apenas esta linha específica usando o ID da pivot
-                        DB::table('plan_parts') // Confirma o nome exato da tua tabela pivot
-                        ->where('id', $pivotRow->pivot->id)
-                            ->update([
-                                'quantity' => $item['quantity'],
-                                'updated_at' => now(),
-                            ]);
+                    if ($existingParts->has($partId)) {
+                        $existing = $existingParts->get($partId);
+                        if ($existing->quantity != $quantity) {
+                            DB::table('plan_parts')->where('id', $existing->id)
+                                ->update(['quantity' => $quantity, 'updated_at' => $now]);
+                            $changed = true;
+                        }
                     } else {
-                        // Se não existe, insere um novo registo limpo sem tarefa
-                        $this->plano->parts()->attach($item['part_id'], [
-                            'plan_task_id' => null, // Substitui pelo nome correto da tua Fk de tarefas, se existir
-                            'quantity' => $item['quantity'],
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
+                        $inserts[] = [
+                            'maintenance_plan_id' => $this->plano->id, 'plan_task_id' => null,
+                            'part_id' => $partId, 'quantity' => $quantity, 'created_at' => $now, 'updated_at' => $now
+                        ];
                     }
                 }
 
-                // Apagar apenas os registos sem tarefa que foram removidos do formulário
-                $this->plano->parts()
-                    ->wherePivot('plan_task_id', null) // Substitui pelo nome correto da tua Fk de tarefas, se existir
-                    ->wherePivotNotIn('part_id', $formPartIds)
-                    ->detach();
+                if (!empty($inserts)) {
+                    DB::table('plan_parts')->insert($inserts);
+                    $changed = true;
+                }
+
+                $deleteQuery = DB::table('plan_parts')
+                    ->where('maintenance_plan_id', $this->plano->id)
+                    ->whereNull('plan_task_id')
+                    ->whereNotIn('part_id', $formPartIds);
+
+                if ($deleteQuery->exists()) {
+                    $deleteQuery->delete();
+                    $changed = true;
+                }
+
+                return $changed;
             });
 
-            Flux::toast(text: 'As peças foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+            if ($hasChanges) {
+                Flux::toast('As peças foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+            } else {
+                Flux::toast('As peças não tem alterações!', variant: 'danger', duration: 1000);
+            }
 
             $this->fechar();
         }
-
 
 
         public function fechar()
@@ -120,7 +132,6 @@
                 return $this->redirect(request()->header('Referer') ?? route('planos_manutencoes.index'), navigate: true);
             }
 
-            $this->plano->refresh();
 
             $this->mount($this->plano);
 
@@ -224,10 +235,11 @@
                                 wire:focus="$set('plan_parts.{{ $index }}.open', true)"
                                 @focus="localOpen = true"
                                 @click="localOpen = true"
-                                @keydown.escape="localOpen = false; $wire.set('plan_parts.{{ $index }}.open', false)"
+                                @keydown.escape="localOpen = false"
                                 placeholder="Pesquisar peça..."
                                 autocomplete="off"
                                 icon="magnifying-glass"
+                                :invalid="$errors->has('plan_parts.'.$index.'.part_id')"
                             />
 
                             <div x-show="localOpen" x-cloak class="relative">
@@ -252,9 +264,10 @@
                             </div>
 
                             @error("plan_parts.$index.part_id")
-                            <flux:error>{{ $message }}</flux:error>
+                            <flux:error class="mt-1">{{ $message }}</flux:error>
                             @enderror
                         </div>
+
 
                         <div class="w-32 shrink-0">
                             <flux:input
@@ -317,10 +330,11 @@
                                     @focus="localOpen = true"
                                     @click="localOpen = true"
                                     @touchstart.passive="localOpen = true"
-                                    @keydown.escape="localOpen = false; $wire.set('plan_parts.{{ $index }}.open', false)"
+                                    @keydown.escape="localOpen = false"
                                     placeholder="Pesquisar peça..."
                                     autocomplete="off"
                                     icon="magnifying-glass"
+                                    :invalid="$errors->has('plan_parts.'.$index.'.part_id')"
                                 />
 
                                 <div x-show="localOpen" x-cloak class="relative">

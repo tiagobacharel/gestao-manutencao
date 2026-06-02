@@ -132,46 +132,96 @@ new class extends Component {
     #[On('salvar-tudo')]
     public function save(): void
     {
-        $this->validate(MaintenanceTask::rules());
+        $this->validate(MaintenanceTask::rules($this));
 
-        DB::transaction(function () {
-            $taskSyncData = [];
-            foreach ($this->maintenance_tasks as $item) {
-                if (empty($item['task_id'])) continue;
-                $taskSyncData[$item['task_id']] = ['status' => $item['status']];
+        $formTasks = collect($this->maintenance_tasks)->filter(fn($t) => !empty($t['task_id']));
+        $taskIds = $formTasks->pluck('task_id')->unique()->all();
+
+        $hasChanges = DB::transaction(function () use ($formTasks, $taskIds) {
+            $now = now();
+            $changed = false;
+
+            $existing = MaintenanceTask::where('maintenance_id', $this->manutencao->id)->get()->keyBy('task_id');
+            $newIds = array_diff($taskIds, $existing->keys()->all());
+            $removedIds = array_diff($existing->keys()->all(), $taskIds);
+
+            if (!empty($newIds)) {
+                $taskMap = $formTasks->keyBy('task_id');
+                DB::table('maintenance_tasks')->insert(array_map(fn($id) => [
+                    'maintenance_id' => $this->manutencao->id, 'task_id' => $id,
+                    'status' => $taskMap->get($id)['status'] ?? 'pending', 'created_at' => $now, 'updated_at' => $now
+                ], $newIds));
+                $changed = true;
             }
-            $this->manutencao->tasks()->sync($taskSyncData);
 
-            $maintenanceTasks = MaintenanceTask::where('maintenance_id', $this->manutencao->id)
-                ->get()
-                ->keyBy('task_id');
-
-            foreach ($this->maintenance_tasks as $item) {
-                if (empty($item['task_id'])) continue;
-
-                $mt = $maintenanceTasks->get($item['task_id']);
-                if (!$mt) continue;
-
-                $this->manutencao->parts()
-                    ->wherePivot('maintenance_task_id', $mt->id)
-                    ->detach();
-
-                foreach ($item['parts'] as $part) {
-                    if (empty($part['part_id'])) continue;
-
-                    $this->manutencao->parts()->attach($part['part_id'], [
-                        'maintenance_task_id' => $mt->id,
-                        'quantity' => $part['quantity'],
-                        'unit_cost_at_time' => $part['unit_cost_at_time'] ?? 0.00,
-                    ]);
+            foreach ($formTasks->filter(fn($t) => $existing->has($t['task_id'])) as $item) {
+                $task = $existing->get($item['task_id']);
+                if ($task->status !== ($item['status'] ?? 'pending')) {
+                    $task->update(['status' => $item['status'] ?? 'pending', 'updated_at' => $now]);
+                    $changed = true;
                 }
             }
+
+            if (!empty($removedIds)) {
+                $removedMtIds = $existing->whereIn('task_id', $removedIds)->pluck('id')->all();
+                DB::table('maintenance_parts')->where('maintenance_id', $this->manutencao->id)->whereIn('maintenance_task_id', $removedMtIds)->delete();
+                MaintenanceTask::whereIn('id', $removedMtIds)->delete();
+                $changed = true;
+            }
+
+            $allTasks = MaintenanceTask::where('maintenance_id', $this->manutencao->id)->get()->keyBy('task_id');
+            $existingParts = DB::table('maintenance_parts')->where('maintenance_id', $this->manutencao->id)
+                ->whereIn('maintenance_task_id', $allTasks->pluck('id')->all())->get()->keyBy(fn($p) => "{$p->maintenance_task_id}-{$p->part_id}");
+
+            $inserts = [];
+            $keptKeys = [];
+
+            foreach ($formTasks as $item) {
+                $mtId = $allTasks->get($item['task_id'])?->id;
+                if (!$mtId) continue;
+
+                foreach (collect($item['parts'] ?? [])->filter(fn($p) => !empty($p['part_id'])) as $part) {
+                    $key = "{$mtId}-{$part['part_id']}";
+                    $keptKeys[] = $key;
+
+                    if ($existingParts->has($key)) {
+                        $existingPart = $existingParts->get($key);
+                        if ($existingPart->quantity != $part['quantity']) {
+                            DB::table('maintenance_parts')->where('id', $existingPart->id)->update(['quantity' => $part['quantity'], 'updated_at' => $now]);
+                            $changed = true;
+                        }
+                    } else {
+                        $inserts[] = [
+                            'maintenance_id' => $this->manutencao->id, 'part_id' => $part['part_id'], 'maintenance_task_id' => $mtId,
+                            'quantity' => $part['quantity'], 'unit_cost_at_time' => $part['unit_cost_at_time'] ?? 0.00, 'created_at' => $now, 'updated_at' => $now
+                        ];
+                    }
+                }
+            }
+
+            if (!empty($inserts)) {
+                DB::table('maintenance_parts')->insert($inserts);
+                $changed = true;
+            }
+
+            $partsToDelete = $existingParts->filter(fn($p) => !in_array("{$p->maintenance_task_id}-{$p->part_id}", $keptKeys))->pluck('id');
+            if ($partsToDelete->isNotEmpty()) {
+                DB::table('maintenance_parts')->whereIn('id', $partsToDelete)->delete();
+                $changed = true;
+            }
+
+            return $changed;
         });
 
-        Flux::toast(text: 'As tarefas foram atualizadas com sucesso!', variant: 'success', duration: 1000);
+        Flux::toast(
+            $hasChanges ? 'As tarefas foram atualizadas com sucesso!' : 'As tarefas não tem alterações!',
+            variant: $hasChanges ? 'success' : 'danger',
+            duration: 1000
+        );
 
         $this->fechar();
     }
+
 
     public function fechar()
     {
@@ -182,7 +232,6 @@ new class extends Component {
             );
         }
 
-        $this->manutencao->refresh();
         $this->mount($this->manutencao);
         $this->resetErrorBag();
 
@@ -315,6 +364,7 @@ new class extends Component {
                                     placeholder="Pesquisar tarefa..."
                                     autocomplete="off"
                                     icon="magnifying-glass"
+                                    :invalid="$errors->has('maintenance_tasks.'.$index.'.task_id')"
                                 />
 
                                 @if($item['open'])
@@ -417,6 +467,7 @@ new class extends Component {
                                                 autocomplete="off"
                                                 icon="magnifying-glass"
                                                 size="sm"
+                                                :invalid="$errors->has('maintenance_tasks.'.$index.'.parts.'.$pi.'.part_id')"
                                             />
 
                                             @if($part['open'])
